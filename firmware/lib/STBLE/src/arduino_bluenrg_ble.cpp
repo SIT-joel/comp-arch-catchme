@@ -51,6 +51,11 @@ extern "C" {
 
 extern volatile uint32_t ms_counter;
 
+/* catch-me forensics: breadcrumb ring in no-init RAM (survives watchdog
+ * resets). Defined in the sketch (crash_diag.cpp); a local extern because
+ * library translation units cannot include sketch headers. */
+extern "C" void cdiag_bc(uint8_t id, uint8_t a, uint16_t b);
+
 /** @addtogroup BSP
  *  @{
  */
@@ -147,15 +152,19 @@ void Hal_Write_Serial(const void* data1, const void* data2, int32_t n_bytes1,
   
   while(1){
     ret = BlueNRG_SPI_Write((uint8_t *)data1,(uint8_t *)data2 + data2_offset, n_bytes1, n_bytes2);
-    
-    if(ret >= 0){      
+
+    if(ret >= 0){
       n_bytes1 = 0;
       n_bytes2 -= ret;
       data2_offset += ret;
       if(n_bytes2==0)
         break;
     }
-    
+    else {
+      /* forensics: module did not accept the chunk (busy/not awake) */
+      cdiag_bc(0x70, (uint8_t)(-ret), (uint16_t)(n_bytes2 & 0xFFFF));
+    }
+
     if(Timer_Expired(&t)){
       break;
     }

@@ -46,15 +46,32 @@ class UiApp {
     return false;
   }
   // Phone-relayed quiz progress: active=0 leaves quiz mode. An idx CHANGE
-  // (or quiz end) acknowledges the pending answer.
+  // (or quiz end) acknowledges the pending answer. Quiz completion
+  // (active 1->0 with a quiz under way) fires the reward banner: the
+  // lecturer must SEE the XP impact on the wearable itself.
   void note_quiz_state(uint8_t active, uint8_t idx, uint8_t total) {
     if (quiz_active_ && quiz_pending_ && (!active || idx != quiz_idx_)) {
       quiz_pending_ = false;  // the server accepted our answer
+    }
+    if (quiz_active_ && !active && quiz_total_ > 0) {
+      flash_reward("QUIZ COMPLETE");
     }
     quiz_active_ = active != 0;
     quiz_idx_ = idx;
     quiz_total_ = total;
     quiz_sent_ = false;  // a new question (or quiz end) resets the pad
+  }
+
+  // Short (8 s) award banner overriding the current screen: title, the
+  // exactly-once +100 points/+100 XP award, and the live server level
+  // (shows "LEVEL UP" as soon as the pet sync delivers the new level).
+  // Never overrides the raid fight or the PIN-evidence screen — those own
+  // the display; the banner appears when they yield.
+  void flash_reward(const char* title) {
+    strncpy(reward_title_, title, sizeof(reward_title_) - 1);
+    reward_title_[sizeof(reward_title_) - 1] = 0;
+    reward_until_ms_ = millis() + 8000;
+    reward_level_at_ = g_petcore.server_level();
   }
 
   // 10 ms tick: retransmit the pending answer until acknowledged.
@@ -114,6 +131,10 @@ class UiApp {
   bool quiz_pending_ = false;
   uint8_t quiz_pending_choice_ = 0;
   uint32_t quiz_last_send_ms_ = 0;
+  // Reward banner state (see flash_reward).
+  char reward_title_[16] = {0};
+  uint32_t reward_until_ms_ = 0;
+  uint8_t reward_level_at_ = 0;
 
  public:
   bool wants_fast_render() const {

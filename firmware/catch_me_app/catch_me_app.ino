@@ -16,6 +16,7 @@
 
 #include "ble_app.h"
 #include "config.h"
+#include "crash_diag.h"
 #include "flash_queue.h"
 #include "game_app.h"
 #include "gps_app.h"
@@ -226,7 +227,9 @@ void build_and_store_record() {
       last_qfull_log = now;
       SerialLog.println("queue full: backup copies dropped (records still sent live)");
     }
+    cdiag::bc(cdiag::B_QFULL, (uint8_t)q_pending(), 0);
   }
+  cdiag::bc(cdiag::B_RECORD, (uint8_t)(sent_live ? 1 : 0), 0);
 }
 
 void setup() {
@@ -234,6 +237,10 @@ void setup() {
   // Bounded wait for a host: SAMD CDC drops early writes (probes lesson).
   for (uint32_t waited = 0; waited < 60000 && !SerialLog; waited += 100) delay(100);
   SerialLog.println("app: serial attached");
+  // FIRST radio-free action: after a watchdog reset, dump the previous
+  // life's breadcrumb tail BEFORE this life's BLE init traffic overwrites
+  // the ring (128 entries; init alone consumes most of it).
+  cdiag::boot_dump();
 
   SerialLog.println("app: flash queue init");
   external_flash_ok = g_queue.begin();
@@ -284,6 +291,16 @@ void setup() {
   // wait) must complete before the 16 s window applies.
   wdt::begin();
   SerialLog.println("app: watchdog on (16s)");
+
+#if CM_WDT_SELFTEST
+  // One-shot validation of the crash-forensics ring (build-property flag,
+  // never part of product builds): let the watchdog fire on purpose, then
+  // the next boot's cdiag::boot_dump() must print this life's breadcrumb
+  // tail from no-init RAM (linker fix proof). Rebuild without the flag after.
+  SerialLog.println("SELFTEST: freezing now; WDT must reset in 16s");
+  cdiag::bc(cdiag::B_TICK, 0x7E, 0);
+  delay(20000);  // far beyond the 16 s watchdog window, feeding nothing
+#endif
 }
 
 void loop() {
@@ -446,6 +463,7 @@ void loop() {
     last_buzzed_completion[sizeof(last_buzzed_completion) - 1] = 0;
     buzz_completion();
     g_petcore.celebrate();  // v2: the pet celebrates a quest award
+    g_ui.flash_reward("QUEST COMPLETE");  // make the +100 XP impact visible
   }
 
   if (now - last_record_ms >= CM_RECORD_PERIOD_MS) {
@@ -497,6 +515,7 @@ void loop() {
 
   if (now - last_status_ms >= 5000) {
     last_status_ms = now;
+    cdiag::bc(cdiag::B_STAT, 0, (uint16_t)(now / 1000));
     SerialLog.print("STAT up=");
     SerialLog.print(now / 1000);
     SerialLog.print(" adv_rx=");

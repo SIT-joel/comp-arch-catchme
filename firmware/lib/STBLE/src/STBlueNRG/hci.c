@@ -94,7 +94,12 @@ void HCI_Process(void)
   tHciDataPacket * hciReadPacket = NULL;
   
   Disable_SPI_IRQ();
-  uint8_t list_empty = list_is_empty(&hciReadPktRxQueue);        
+  uint8_t list_empty = list_is_empty(&hciReadPktRxQueue);
+  if (!list_empty) {
+    /* breadcrumb only when events are actually pending: keeps the ring
+     * sparse so a freeze during idle cycling still has deep history */
+    cdiag_bc(0x30, (uint8_t)list_get_size(&hciReadPktRxQueue), 0);
+  }
   /* process any pending events read */
   while(list_empty == FALSE)
   {
@@ -127,6 +132,11 @@ volatile uint32_t hci_irq_drain_bads = 0;
 volatile uint8_t hci_irq_stuck = 0;
 volatile uint32_t hci_verify_bads = 0;
 
+/* catch-me forensics: breadcrumb ring in no-init RAM (survives watchdog
+ * resets). Defined in the sketch (crash_diag.cpp); declared here because
+ * library translation units cannot include sketch headers. */
+extern void cdiag_bc(uint8_t id, uint8_t a, uint16_t b);
+
 void HCI_Isr(void)
 {
   tHciDataPacket * hciReadPacket = NULL;
@@ -140,6 +150,7 @@ void HCI_Isr(void)
        * Return and let HCI_Process be called again; the app watches the
        * counters and hard-resets the module if the cap keeps tripping. */
       hci_irq_drain_capped++;
+      cdiag_bc(0x31, reads, 0);
       return;
     }
     hci_irq_stuck = 0;
@@ -218,9 +229,11 @@ static void move_list(tListNode * dest_list, tListNode * src_list)
 static void free_event_list(void)
 {
   tHciDataPacket * pckt;
-    
+
   Disable_SPI_IRQ();
-  
+  cdiag_bc(0x32, (uint8_t)list_get_size(&hciReadPktPool),
+           (uint16_t)list_get_size(&hciReadPktRxQueue));
+
   while(list_get_size(&hciReadPktPool) < HCI_READ_PACKET_NUM_MAX/2){
     list_remove_head(&hciReadPktRxQueue, (tListNode **)&pckt);    
     list_insert_tail(&hciReadPktPool, (tListNode *)pckt);
@@ -256,7 +269,8 @@ int hci_send_req(struct hci_request *r, BOOL async)
   /* Minimum timeout is 1. */
   if(to == 0)
     to = 1;
-  
+
+  cdiag_bc(0x20, 0, opcode);  /* forensics: sync command issued */
   Timer_Set(&t, to);
   
   while(1) {
@@ -361,17 +375,19 @@ int hci_send_req(struct hci_request *r, BOOL async)
     
   }
   
-failed: 
+failed:
   if(hciReadPacket!=NULL){
     list_insert_head(&hciReadPktPool, (tListNode *)hciReadPacket);
   }
-  move_list(&hciReadPktRxQueue, &hciTempQueue);  
+  move_list(&hciReadPktRxQueue, &hciTempQueue);
   Enable_SPI_IRQ();
+  cdiag_bc(0x22, 0, opcode);  /* forensics: timeout/failure */
   return -1;
-  
+
 done:
   // Insert the packet back into the pool.
-  list_insert_head(&hciReadPktPool, (tListNode *)hciReadPacket); 
+  list_insert_head(&hciReadPktPool, (tListNode *)hciReadPacket);
+  cdiag_bc(0x21, 0, opcode);  /* forensics: command answered */
   move_list(&hciReadPktRxQueue, &hciTempQueue);
   
   Enable_SPI_IRQ();

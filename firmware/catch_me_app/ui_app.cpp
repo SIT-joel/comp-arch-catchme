@@ -227,6 +227,41 @@ void UiApp::apply_interaction_ack(const uint8_t* payload, uint16_t len) {
 
 void UiApp::render() {
   display_.clearScreen();
+  // Reward banner (8 s) overrides ordinary screens: the quest's XP impact
+  // must be visible on the wearable itself, not only in the phone app. The
+  // raid fight and PIN-evidence screens keep ownership of the display.
+  const bool fight_owning = g_game.active() || g_ble.raid_active();
+  if (reward_until_ms_ != 0 && millis() < reward_until_ms_ && !fight_owning &&
+      screen_ != SCR_INTERACTION) {
+    display_.setFont(liberationSans_10ptFontInfo);
+    display_.setCursor(0, 0);
+    display_.fontColor(TS_8b_Green, TS_8b_Black);
+    display_.print(reward_title_);
+    display_.setFont(liberationSans_8ptFontInfo);
+    display_.setCursor(0, 20);
+    display_.fontColor(TS_8b_White, TS_8b_Black);
+    display_.print("+100 points");
+    display_.setCursor(0, 32);
+    display_.print("+100 XP");
+    const uint8_t lvl = g_petcore.server_level();
+    display_.setCursor(0, 44);
+    if (reward_level_at_ != 0 && lvl > reward_level_at_) {
+      display_.fontColor(TS_8b_Yellow, TS_8b_Black);
+      display_.print("LEVEL UP! -> ");
+      display_.print(lvl);
+    } else if (lvl != 0) {
+      display_.fontColor(TS_8b_Gray, TS_8b_Black);
+      display_.print("LEVEL ");
+      display_.print(lvl);
+    } else {
+      display_.fontColor(TS_8b_Gray, TS_8b_Black);
+      display_.print("syncing level...");
+    }
+    return;
+  }
+  if (reward_until_ms_ != 0 && millis() >= reward_until_ms_) {
+    reward_until_ms_ = 0;  // banner spent; normal screens resume
+  }
   display_.setFont(liberationSans_10ptFontInfo);
   display_.fontColor(TS_8b_White, TS_8b_Black);
   switch (screen_) {
