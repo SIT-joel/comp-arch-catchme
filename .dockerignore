@@ -1,0 +1,11 @@
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+tools/
+android/
+firmware/
+*.log
+.env
+.env.*
+!.env.example
