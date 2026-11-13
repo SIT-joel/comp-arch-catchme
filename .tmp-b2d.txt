@@ -1,0 +1,11 @@
+[1793700342.950] ble: -> SCANNING
+[1793700342.952] ble: discovery started
+[1793700344.955] ble: -> ADVERTISING
+[1793700344.959] ble: adv on cnt=33
+[1793700345.765] STAT up=234 phone=0 peers=12 q=31 gps_chars=0
+[1793700347.264] ble: -> SCANNING
+[1793700347.266] ble: discovery started
+[1793700349.270] ble: -> ADVERTISING
+[1793700349.273] ble: adv on cnt=34
+[1793700350.765] STAT up=239 phone=0 peers=13 q=36 gps_chars=0
+[1793700351.572] ble: -> SCANNING

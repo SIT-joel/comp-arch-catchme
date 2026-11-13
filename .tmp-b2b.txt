@@ -1,0 +1,87 @@
+[1793698538.411] app: serial attached
+[1793698538.412] app: flash queue init
+[1793698538.412] fq: flash.begin
+[1793698538.412] fq: begin FAIL
+[1793698538.412] flash: no W25Q shield - using internal flash queue
+[1793698538.413] boot_id=d2-i32
+[1793698538.413] app: gps init
+[1793698541.663] app: pulse init
+[1793698541.674] pulse: MAX30101 not found on any adapter port
+[1793698541.674] app: ui init
+[1793698541.700] app: ble init
+[1793698541.724] catch_me device 2 up, fw 1
+[1793698541.725] app: boot reason: WATCHDOG (previous life 0 ms)
+[1793698541.730] app: watchdog on (16s)
+[1793698541.740] ble: -> ADVERTISING
+[1793698541.744] ble: adv on cnt=1
+[1793698541.745] queue full: backup copies dropped (records still sent live)
+[1793698541.754] STAT up=15 phone=0 peers=0 q=248 gps_chars=0
+[1793698542.286] ble: phone connected
+[1793698542.975] HELLO -> STATUS send=ok
+[1793698543.577] ble: session active=1 completion_flag=0
+[1793698544.082] ble: INTERACTION len=58 ver=1
+[1793698544.172] time anchor epoch=1793698544 unc=500
+[1793698544.293] ble: partner=Miya dist=-1
+[1793698544.384] ble: discovery mode=0 token=0
+[1793698546.747] STAT up=20 phone=1 peers=0 q=240 gps_chars=0
+[1793698547.331] ble: disconnected handle=2049
+[1793698547.331] ble: -> SCANNING
+[1793698547.333] ble: -> ADVERTISING
+[1793698547.336] ble: adv on cnt=2
+[1793698548.787] ble: phone connected
+[1793698549.455] HELLO -> STATUS send=ok
+[1793698550.923] ble: session active=1 completion_flag=0
+[1793698550.983] ble: discovery mode=0 token=0
+[1793698551.468] ble: INTERACTION len=58 ver=1
+[1793698551.619] time anchor epoch=1793698551 unc=500
+[1793698551.710] ble: partner=Miya dist=-1
+[1793698551.751] STAT up=25 phone=1 peers=0 q=234 gps_chars=0
+[1793698553.936] ble: disconnected handle=2050
+[1793698553.937] ble: -> SCANNING
+[1793698553.938] ble: -> ADVERTISING
+[1793698553.942] ble: adv on cnt=3
+[1793698554.794] queue full: backup copies dropped (records still sent live)
+[1793698556.246] ble: -> SCANNING
+[1793698556.247] ble: discovery started
+[1793698556.759] STAT up=30 phone=0 peers=1 q=228 gps_chars=0
+[1793698558.256] ble: -> ADVERTISING
+[1793698558.260] ble: adv on cnt=4
+[1793698558.410] ble: phone connected
+[1793698559.084] HELLO -> STATUS send=ok
+[1793698561.454] ble: session active=1 completion_flag=0
+[1793698561.765] STAT up=35 phone=1 peers=1 q=222 gps_chars=0
+[1793698561.962] ble: INTERACTION len=58 ver=1
+[1793698562.143] ble: discovery mode=0 token=0
+[1793698562.658] time anchor epoch=1793698562 unc=500
+[1793698562.749] ble: partner=Miya dist=-1
+[1793698563.464] ble: disconnected handle=2051
+[1793698563.464] ble: -> SCANNING
+[1793698563.465] ble: -> ADVERTISING
+[1793698563.469] ble: adv on cnt=5
+[1793698563.750] ble: phone connected
+[1793698564.436] HELLO -> STATUS send=ok
+[1793698566.374] ble: session active=1 completion_flag=0
+[1793698566.765] STAT up=40 phone=1 peers=1 q=212 gps_chars=0
+[1793698566.983] ble: INTERACTION len=58 ver=1
+[1793698567.034] time anchor epoch=1793698566 unc=500
+[1793698567.124] ble: partner=Miya dist=-1
+[1793698567.216] ble: discovery mode=0 token=0
+[1793698568.808] ble: disconnected handle=2052
+[1793698568.808] ble: -> SCANNING
+[1793698568.810] ble: -> ADVERTISING
+[1793698568.814] ble: adv on cnt=6
+[1793698568.844] queue full: backup copies dropped (records still sent live)
+[1793698571.112] ble: -> SCANNING
+[1793698571.113] ble: discovery started
+[1793698571.766] STAT up=45 phone=0 peers=2 q=208 gps_chars=0
+[1793698573.119] ble: -> ADVERTISING
+[1793698573.122] ble: adv on cnt=7
+[1793698573.403] ble: phone connected
+[1793698574.098] HELLO -> STATUS send=ok
+[1793698576.769] STAT up=50 phone=1 peers=2 q=202 gps_chars=0
+[1793698577.358] ble: session active=1 completion_flag=0
+[1793698577.869] ble: INTERACTION len=58 ver=1
+[1793698578.027] time anchor epoch=1793698577 unc=500
+[1793698578.077] ble: partner=Miya dist=-1
+[1793698578.168] ble: discovery mode=0 token=0
+[1793698578.461] ble: disconnected handle=2053

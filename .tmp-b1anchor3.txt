@@ -1,0 +1,17 @@
+[1793769258.782] ble: -> SCANNING
+[1793769258.783] ble: discovery started
+[1793769260.279] STAT up= phone=0 peers=53 q=211 gps_chars=212956
+[1793769260.794] ble: -> ADVERTISING
+[1793769260.797] ble: adv on cnt=342
+[1793769262.303] ble: -> SCANNING
+[1793769262.304] ble: discovery started
+[1793769264.315] ble: -> ADVERTISING
+[1793769264.318] ble: adv on cnt=343
+[1793769265.283] STAT up=1668 phone=0 peers= q=216 gps_chars=213608
+[1793769265.824] ble: -> SCANNING
+[1793769265.825] ble: discovery started
+[1793769267.838] ble: -> ADVERTISING
+[1793769267.841] ble: adv on cnt=344
+[1793769268.519] ble: phone connected
+[1793769270.302] STAT up= phone=1 peers=54 q=215 gps_chars=214337
+[1793769272.096] ble: notify fail 0x

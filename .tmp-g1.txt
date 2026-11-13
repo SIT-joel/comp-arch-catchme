@@ -1,0 +1,3 @@
+[1793907014.430] STAT up=74 phone=0 peers=0 q=72 gps_chars=0
+[1793907019.427] STAT up=79 phone=0 peers=0 q=77 gps_chars=0
+[1793907024.422] STAT up=84 phone=0 peers=0 q=82 gps_chars=0

@@ -1,0 +1,18 @@
+[1793769452.112] ble: disconnected handle=2065
+[1793769452.113] ble: -> SCANNING
+[1793769452.113] ble: -> ADVERTISING
+[1793769452.115] ble: adv on cnt=36
+[1793769452.656] ble: phone connected
+[1793769455.363] STAT up=165 phone=1 peers=6 q=125 gps_chars=21137
+[1793769457.928] ble: disconnected handle=2066
+[1793769457.928] ble: -> SCANNING
+[1793769457.929] ble: -> ADVERTISING
+[1793769457.931] ble: adv on cnt=37
+[1793769459.438] ble: -> SCANNING
+[1793769459.439] ble: discovery started
+[1793769460.373] STAT up=170 phone=0 peers=7 q=124 gps_chars=21783
+[1793769461.452] ble: -> ADVERTISING
+[1793769461.454] ble: adv on cnt=38
+[1793769463.086] ble: -> SCANNINGble: discovery started
+[1793769465.307] ble: -> ADVERTISINGble: adv on cnt=
+[1793769465.403] STAT up=176 phone=0 peers=7 q=129 gps_chars=22406

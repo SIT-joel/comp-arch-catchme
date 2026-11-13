@@ -1,0 +1,25 @@
+[1793698435.059] app: serial attached
+[1793698435.060] app: flash queue init
+[1793698435.060] fq: flash.begin
+[1793698435.060] fq: begin FAIL
+[1793698435.061] flash: no W25Q shield - using internal flash queue
+[1793698435.061] boot_id=d2-i30
+[1793698435.061] app: gps init
+[1793698438.311] app: pulse init
+[1793698438.322] pulse: MAX30101 not found on any adapter port
+[1793698438.323] app: ui init
+[1793698438.348] app: ble init
+[1793698438.373] catch_me device 2 up, fw 1
+[1793698438.373] app: boot reason: power-on
+[1793698438.379] app: watchdog on (16s)
+[1793698438.389] ble: -> ADVERTISING
+[1793698438.392] ble: adv on cnt=1
+[1793698438.393] queue full: backup copies dropped (records still sent live)
+[1793698438.403] STAT up=61 phone=0 peers=0 q=248 gps_chars=0
+[1793698438.543] ble: phone connected
+[1793698439.182] HELLO -> STATUS send=ok
+[1793698440.377] ble: discovery mode=0 token=0
+[1793698440.766] ble: session active=1 completion_flag=0
+[1793698441.247] ble: INTERACTION len=58 ver=1
+[1793698441.397] time anchor epoch=1793698441 unc=500
+[1793698441.555] ble: partner=Miya dist=-1

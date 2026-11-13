@@ -1,0 +1,20 @@
+[1793698768.720] ble: -> SCANNING
+[1793698768.721] ble: discovery started
+[1793698768.903] STAT up=97 phone=0 peers=3 q=208 gps_chars=0
+[1793698770.728] ble: -> ADVERTISING
+[1793698770.731] ble: adv on cnt=8
+[1793698771.658] ble: phone connected
+[1793698772.542] HELLO -> STATUS send=ok
+[1793698773.913] STAT up=102 phone=1 peers=3 q=204 gps_chars=0
+[1793698774.301] ble: session active=1 completion_flag=0
+[1793698774.783] ble: INTERACTION len=58 ver=1
+[1793698775.211] ble: partner=Miya dist=-1
+[1793698775.262] ble: discovery mode=0 token=0
+[1793698776.701] ble: disconnected handle=2053
+[1793698776.702] ble: -> SCANNING
+[1793698776.703] ble: -> ADVERTISING
+[1793698776.707] ble: adv on cnt=9
+[1793698777.068] queue full: backup copies dropped (records still sent live)
+[1793698778.921] STAT up=107 phone=0 peers=3 q=198 gps_chars=0
+[1793698779.013] ble: -> SCANNING
+[1793698779.015] ble: discovery started

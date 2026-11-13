@@ -1,0 +1,85 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+local.properties
+*.jks
+*.keystore
+secrets/
+
+# JavaScript
+node_modules/
+dist/
+coverage/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Android / Gradle
+.gradle/
+build/
+*.apk
+*.aab
+captures/
+
+# Firmware artifacts
+.pio/
+*.elf
+*.hex
+*.bin
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local logs / data / databases
+*.log
+*.sqlite
+*.sqlite3
+local-data/
+backups/
+artifacts/
+
+# ---- catch-me: toolchains / vendored runtimes (huge; setup documented) ----
+tools/arduino-cli/
+tools/android/
+tools/android-gradle-home/
+
+# ---- catch-me: firmware build dirs + bench logs/dumps ----
+tools/build/
+tools/crash_logs/
+tools/bench_raid_last_*.txt
+tools/feq.db*
+tools/phone_bt_dump*.txt
+tools/phone_logcat.txt
+tools/tt.txt
+tools/sid.txt
+tools/mt.txt
+tools/inv_id.txt
+firmware/catch_me_app/build/
+
+# ---- catch-me: android build outputs ----
+android/app/build/
+android/build/
+android/.gradle/
+
+# ---- catch-me: local build caches / keystores (never publish) ----
+.gradle-user/
+tools/android-user-home/
+
+# ---- catch-me: android debug keystore / user homes (never publish) ----
+.android-user/
+debug.keystore
+debug.keystore.lock
+*.keystore.lock

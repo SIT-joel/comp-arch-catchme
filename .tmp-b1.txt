@@ -1,0 +1,29 @@
+[1793698093.715] STAT up=2381 phone=0 peers=496 q=2000 gps_chars=298768
+[1793698094.288] ble: -> SCANNING
+[1793698094.289] ble: discovery started
+[1793698096.301] ble: -> ADVERTISING
+[1793698096.304] ble: adv on cnt=651
+[1793698097.809] ble: -> SCANNING
+[1793698097.810] ble: discovery started
+[1793698098.746] STAT up=2386 phone=0 peers=497 q=2000 gps_chars=299412
+[1793698099.822] ble: -> ADVERTISING
+[1793698099.948] ble: adv on cnt=
+[1793698100.736] queue full: backup copies dropped (records still sent live)
+[1793698101.330] ble: -> SCANNING
+[1793698101.331] ble: discovery started
+[1793698103.343] ble: -> ADVERTISING
+[1793698103.345] ble: adv on cnt=653
+[1793698103.776] STAT up=2391 phone=0 peers=498 q=2000 gps_chars=300058
+[1793698104.952] ble: -> SCANNINGble: discovery started
+[1793698106.954] ble: -> ADVERTISINGble: adv on cnt=654
+[1793698108.372] ble: -> SCANNING
+[1793698108.372] ble: discovery started
+[1793698108.805] STAT up=2396 phone=0 peers=499 q=2000 gps_chars=300704
+[1793698110.382] ble: -> ADVERTISING
+[1793698110.385] ble: adv on cnt=655
+[1793698110.795] queue full: backup copies dropped (records still sent live)
+[1793698111.960] ble: -> SCANNINGble: discovery started
+[1793698113.955] STAT up= phone=0 peers=499 q=2000 gps_chars=301395
+[1793698113.968] ble: -> ADVERTISING
+[1793698113.970] ble: adv on cnt=656
+[1793698115.473] ble: -> SCANNING

@@ -1,0 +1,33 @@
+[1793732236.261] app: serial attached
+[1793732236.261] app: flash queue init
+[1793732236.262] fq: flash.begin
+[1793732236.262] fq: begin FAIL
+[1793732236.262] flash: no W25Q shield - using internal flash queue
+[1793732236.264] DIAGNOSTIC: internal queue DISABLED (watchdog-reboot triage); unlinked records are dropped, live sends unaffected
+[1793732236.264] boot_id=
+[1793732236.264] app: gps init
+[1793732239.512] app: pulse init
+[1793732239.523] pulse: MAX30101 not found on any adapter port
+[1793732239.523] app: ui init
+[1793732239.549] app: ble init
+[1793732239.574] catch_me device 2 up, fw 1
+[1793732239.574] app: boot reason: system request
+[1793732239.579] app: watchdog on (16s)
+[1793732239.589] ble: -> ADVERTISING
+[1793732239.593] ble: adv on cnt=1
+[1793732239.603] STAT up=9 phone=0 peers=0 q=0 gps_chars=0
+[1793732240.395] ble: phone connected
+[1793732241.103] HELLO -> STATUS send=ok
+[1793732244.421] ble: session active=1 completion_flag=0
+[1793732244.541] ble: discovery mode=0 token=0
+[1793732244.596] STAT up=14 phone=1 peers=0 q=0 gps_chars=0
+[1793732244.988] ble: INTERACTION len=58 ver=1
+[1793732245.138] time anchor epoch=1793732245 unc=500
+[1793732245.259] ble: partner=Miya dist=-1
+[1793732245.435] ble: disconnected handle=2049
+[1793732245.435] ble: -> SCANNING
+[1793732245.437] ble: -> ADVERTISING
+[1793732245.440] ble: adv on cnt=2
+[1793732245.621] queue full: backup copies dropped (records still sent live)
+[1793732247.744] ble: -> SCANNING
+[1793732247.746] ble: discovery started

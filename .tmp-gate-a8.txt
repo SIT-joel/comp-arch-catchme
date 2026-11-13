@@ -1,0 +1,88 @@
+app: serial attached
+app: flash queue init
+fq: flash.begin
+fq: jedec 0xEF4014
+fq: header rewritten for new boot
+boot_id=d1-157
+app: gps init SKIPPED (v2: phone GPS is the location source)
+app: pulse init SKIPPED (v2: heart quest removed)
+app: pet init
+pet_store: backend=w25q counter=3 loaded=1
+pet_core: species=-1 name=(unnamed) stage=0
+app: ui init
+app: ble init
+catch_me device 1 up, fw 1
+app: boot reason: system request
+GATE: armed (suspends TDD; central connects in 5 s)
+GATE: my writable attr (uart_tx_char_handle+1)=14
+app: watchdog on (16s)
+GATE: vendor ecode=0x1
+STAT up=6 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+GATE: create_connection sent
+STAT up=11 phone=0 peers=0 q=2000 gps_chars=0
+GATE: connected (central), disc=0
+GATE: vendor ecode=0xC12
+GATE: disc resp decl=13 parsed_value=14
+GATE: peer tx char handle=14
+GATE: vendor ecode=0xC11
+GATE: gatt error resp handle=2049 attr=16 err=0xA
+GATE: vendor ecode=0xC10
+GATE: proc complete, error=0x0
+GATE: discovery complete, writing at 10 Hz
+STAT up=16 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=21 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=26 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=31 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=36 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=41 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=46 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=51 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=56 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=61 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=66 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=71 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=76 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=81 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=86 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=91 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=96 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=101 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=106 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=111 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=116 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=121 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=126 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=131 phone=0 peers=0 q=2000 gps_chars=0
+GATE: writing window complete writes=1096
+GATE: RESULT connect_ms=11495 writes=1096 duration_ms=120012
+ble: disconnected handle=2049 reason=0x22
+GATE: vendor ecode=0xC16
+STAT up=136 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=141 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=146 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=151 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=156 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=161 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=166 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=171 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=176 phone=0 peers=0 q=2000 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+STAT up=181 phone=0 peers=0 q=2000 gps_chars=0
+STAT up=186 phone=0 peers=0 q=2000 gps_chars=0

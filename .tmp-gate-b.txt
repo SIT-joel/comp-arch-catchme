@@ -1,0 +1,61 @@
+app: serial attached
+app: flash queue init
+fq: flash.begin
+fq: begin FAIL
+flash: no W25Q shield - using internal flash queue
+boot_id=d2-i1
+app: gps init SKIPPED (v2: phone GPS is the location source)
+app: pulse init SKIPPED (v2: heart quest removed)
+app: pet init
+pet_store: backend=internal counter=0 loaded=0
+pet_core: species=-1 name=(unnamed) stage=0
+app: ui init
+app: ble init
+catch_me device 2 up, fw 1
+app: boot reason: system request
+GATE: armed (suspends TDD; central connects in 5 s)
+app: watchdog on (16s)
+GATE: vendor ecode=0x1
+ble: -> ADVERTISING
+ble: adv on cnt=1
+GATE: peripheral advertising on (single set_discoverable)
+STAT up=9 phone=0 peers=0 q=1 gps_chars=0
+ble: adv on cnt=2
+ble: adv on cnt=3
+ble: adv on cnt=4
+STAT up=14 phone=0 peers=0 q=5 gps_chars=0
+ble: phone connected
+STAT up=19 phone=1 peers=0 q=0 gps_chars=0
+STAT up=24 phone=1 peers=0 q=0 gps_chars=0
+STAT up=29 phone=1 peers=0 q=0 gps_chars=0
+STAT up=34 phone=1 peers=0 q=0 gps_chars=0
+STAT up=39 phone=1 peers=0 q=0 gps_chars=0
+STAT up=44 phone=1 peers=0 q=0 gps_chars=0
+STAT up=49 phone=1 peers=0 q=0 gps_chars=0
+STAT up=54 phone=1 peers=0 q=0 gps_chars=0
+STAT up=59 phone=1 peers=0 q=0 gps_chars=0
+STAT up=64 phone=1 peers=0 q=0 gps_chars=0
+STAT up=69 phone=1 peers=0 q=0 gps_chars=0
+STAT up=74 phone=1 peers=0 q=0 gps_chars=0
+STAT up=79 phone=1 peers=0 q=0 gps_chars=0
+STAT up=84 phone=1 peers=0 q=0 gps_chars=0
+STAT up=89 phone=1 peers=0 q=0 gps_chars=0
+STAT up=94 phone=1 peers=0 q=0 gps_chars=0
+STAT up=99 phone=1 peers=0 q=0 gps_chars=0
+STAT up=104 phone=1 peers=0 q=0 gps_chars=0
+STAT up=109 phone=1 peers=0 q=0 gps_chars=0
+STAT up=114 phone=1 peers=0 q=0 gps_chars=0
+STAT up=119 phone=1 peers=0 q=0 gps_chars=0
+STAT up=124 phone=1 peers=0 q=0 gps_chars=0
+STAT up=130 phone=1 peers=0 q=0 gps_chars=0
+STAT up=135 phone=1 peers=0 q=0 gps_chars=0
+STAT up=140 phone=1 peers=0 q=0 gps_chars=0
+STAT up=145 phone=1 peers=0 q=0 gps_chars=0
+STAT up=150 phone=1 peers=0 q=0 gps_chars=0
+STAT up=155 phone=1 peers=0 q=0 gps_chars=0
+STAT up=160 phone=1 peers=0 q=0 gps_chars=0
+STAT up=165 phone=1 peers=0 q=0 gps_chars=0
+STAT up=170 phone=1 peers=0 q=0 gps_chars=0
+STAT up=175 phone=1 peers=0 q=0 gps_chars=0
+STAT up=180 phone=1 peers=0 q=0 gps_chars=0
+STAT up=185 phone=1 peers=0 q=0 gps_chars=0

@@ -1,0 +1,57 @@
+STAT up=485 phone=0 peers=0 q=117 gps_chars=0
+ble: adv on cnt=110
+ble: adv on cnt=111
+ble: adv on cnt=112
+ble: adv on cnt=113
+ble: phone connected
+STAT up=490 phone=1 peers=0 q=122 gps_chars=0
+STAT up=495 phone=1 peers=0 q=112 gps_chars=0
+STAT up=500 phone=1 peers=0 q=102 gps_chars=0
+STAT up=505 phone=1 peers=0 q=92 gps_chars=0
+STAT up=510 phone=1 peers=0 q=82 gps_chars=0
+STAT up=515 phone=1 peers=0 q=72 gps_chars=0
+STAT up=520 phone=1 peers=0 q=62 gps_chars=0
+STAT up=525 phone=1 peers=0 q=52 gps_chars=0
+STAT up=530 phone=1 peers=0 q=42 gps_chars=0
+STAT up=535 phone=1 peers=0 q=32 gps_chars=0
+STAT up=540 phone=1 peers=0 q=22 gps_chars=0
+STAT up=545 phone=1 peers=0 q=12 gps_chars=0
+STAT up=550 phone=1 peers=0 q=2 gps_chars=0
+STAT up=555 phone=1 peers=0 q=0 gps_chars=0
+STAT up=560 phone=1 peers=0 q=0 gps_chars=0
+STAT up=565 phone=1 peers=0 q=0 gps_chars=0
+STAT up=570 phone=1 peers=0 q=0 gps_chars=0
+STAT up=575 phone=1 peers=0 q=0 gps_chars=0
+STAT up=580 phone=1 peers=0 q=0 gps_chars=0
+STAT up=585 phone=1 peers=0 q=0 gps_chars=0
+STAT up=590 phone=1 peers=0 q=0 gps_chars=0
+STAT up=595 phone=1 peers=0 q=0 gps_chars=0
+STAT up=600 phone=1 peers=0 q=0 gps_chars=0
+STAT up=605 phone=1 peers=0 q=0 gps_chars=0
+ble: disconnected handle=2051
+ble: -> SCANNING
+ble: -> ADVERTISING
+ble: adv on cnt=114
+GATE: peripheral advertising on (single set_discoverable)
+STAT up=610 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=115
+ble: adv on cnt=116
+ble: adv on cnt=117
+STAT up=615 phone=0 peers=0 q=5 gps_chars=0
+ble: adv on cnt=118
+ble: adv on cnt=119
+ble: adv on cnt=120
+ble: adv on cnt=121
+STAT up=620 phone=0 peers=0 q=10 gps_chars=0
+ble: adv on cnt=122
+ble: adv on cnt=123
+ble: adv on cnt=124
+STAT up=625 phone=0 peers=0 q=15 gps_chars=0
+ble: adv on cnt=125
+ble: adv on cnt=126
+ble: adv on cnt=127
+ble: adv on cnt=128
+STAT up=630 phone=0 peers=0 q=20 gps_chars=0
+ble: adv on cnt=129
+ble: adv on cnt=130
+ble: adv on cnt=131

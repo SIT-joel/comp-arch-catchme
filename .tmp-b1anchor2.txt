@@ -1,0 +1,27 @@
+[1793769061.109] ble: -> ADVERTISING
+[1793769061.111] ble: adv on cnt=291
+[1793769062.617] ble: -> SCANNING
+[1793769062.618] ble: discovery started
+[1793769063.753] STAT up=1467 phone=0 peers=38 q=160 gps_chars=187588
+[1793769064.629] ble: -> ADVERTISING
+[1793769064.631] ble: adv on cnt=292
+[1793769066.138] ble: -> SCANNING
+[1793769066.139] ble: discovery started
+[1793769068.151] ble: -> ADVERTISING
+[1793769068.153] ble: adv on cnt=293
+[1793769068.764] STAT up=1472 phone=0 peers=38 q=165 gps_chars=188234
+[1793769069.660] ble: -> SCANNING
+[1793769069.661] ble: discovery started
+[1793769071.671] ble: -> ADVERTISING
+[1793769071.674] ble: adv on cnt=294
+[1793769073.180] ble: -> SCANNING
+[1793769073.181] ble: discovery started
+[1793769073.774] STAT up=1477 phone=0 peers=38 q=170 gps_chars=188880
+[1793769075.198] ble: -> ADVERTISING
+[1793769075.305] ble: adv on cnt=
+[1793769076.702] ble: -> SCANNING
+[1793769076.703] ble: discovery started
+[1793769078.715] ble: -> ADVERTISING
+[1793769078.718] ble: adv on cnt=296
+[1793769078.805] STAT up=1482 phone=0 peers=39 q=175 gps_chars=189526
+[1793769080.309] ble: -> SCANNINGble: discovery started

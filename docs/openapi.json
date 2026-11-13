@@ -1,0 +1,3821 @@
+{
+  "components": {
+    "schemas": {
+      "AcceptedIdentity": {
+        "properties": {
+          "boot_id": {
+            "title": "Boot Id",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boot_id",
+          "sequence"
+        ],
+        "title": "AcceptedIdentity",
+        "type": "object"
+      },
+      "BindIn": {
+        "properties": {
+          "pairing_code": {
+            "maxLength": 128,
+            "minLength": 4,
+            "title": "Pairing Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairing_code"
+        ],
+        "title": "BindIn",
+        "type": "object"
+      },
+      "BindOut": {
+        "properties": {
+          "device": {
+            "$ref": "#/components/schemas/DeviceSummary"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "title": "BindOut",
+        "type": "object"
+      },
+      "BluetoothSourceOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "observed_at"
+        ],
+        "title": "BluetoothSourceOut",
+        "type": "object"
+      },
+      "ClockInfo": {
+        "properties": {
+          "source": {
+            "enum": [
+              "phone_server_anchor",
+              "unsynced",
+              "device_rtc"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "uncertainty_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Ms"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "ClockInfo",
+        "type": "object"
+      },
+      "CompletionEvent": {
+        "properties": {
+          "completion_event_id": {
+            "title": "Completion Event Id",
+            "type": "string"
+          },
+          "interaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InteractionSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "completion_event_id",
+          "session_id"
+        ],
+        "title": "CompletionEvent",
+        "type": "object"
+      },
+      "DeviceStateOut": {
+        "properties": {
+          "completion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompletionEvent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partner_alias": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Alias"
+          },
+          "partner_device_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Device Id"
+          },
+          "partner_distance_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Distance M"
+          },
+          "partner_position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartnerPosition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          },
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state_version": {
+            "title": "State Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state_version",
+          "server_time"
+        ],
+        "title": "DeviceStateOut",
+        "type": "object"
+      },
+      "DeviceSummary": {
+        "properties": {
+          "claimed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "firmware_alias": {
+            "title": "Firmware Alias",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "firmware_alias"
+        ],
+        "title": "DeviceSummary",
+        "type": "object"
+      },
+      "DiscoveryOut": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "notices": {
+            "items": {
+              "$ref": "#/components/schemas/NoticeOut"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "position_state": {
+            "enum": [
+              "fresh",
+              "last_known",
+              "expired",
+              "missing"
+            ],
+            "title": "Position State",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryResultOut"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generated_at",
+          "position_state",
+          "notices",
+          "results"
+        ],
+        "title": "DiscoveryOut",
+        "type": "object"
+      },
+      "DiscoveryProfileIn": {
+        "properties": {
+          "age": {
+            "maximum": 99.0,
+            "minimum": 18.0,
+            "title": "Age",
+            "type": "integer"
+          },
+          "display_name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "interests": {
+            "items": {
+              "enum": [
+                "gaming",
+                "music",
+                "fitness",
+                "food",
+                "movies",
+                "travel",
+                "reading",
+                "outdoors"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Interests",
+            "type": "array"
+          },
+          "pref_max_age": {
+            "maximum": 99.0,
+            "minimum": 18.0,
+            "title": "Pref Max Age",
+            "type": "integer"
+          },
+          "pref_min_age": {
+            "maximum": 99.0,
+            "minimum": 18.0,
+            "title": "Pref Min Age",
+            "type": "integer"
+          },
+          "radius_m": {
+            "maximum": 5000.0,
+            "minimum": 100.0,
+            "title": "Radius M",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "display_name",
+          "age",
+          "pref_min_age",
+          "pref_max_age",
+          "interests",
+          "radius_m"
+        ],
+        "title": "DiscoveryProfileIn",
+        "type": "object"
+      },
+      "DiscoveryProfileOut": {
+        "properties": {
+          "age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age"
+          },
+          "bluetooth_enabled": {
+            "title": "Bluetooth Enabled",
+            "type": "boolean"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "gps_enabled": {
+            "title": "Gps Enabled",
+            "type": "boolean"
+          },
+          "interests": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Interests",
+            "type": "array"
+          },
+          "pref_max_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pref Max Age"
+          },
+          "pref_min_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pref Min Age"
+          },
+          "radius_m": {
+            "title": "Radius M",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "display_name",
+          "interests",
+          "radius_m",
+          "bluetooth_enabled",
+          "gps_enabled",
+          "complete"
+        ],
+        "title": "DiscoveryProfileOut",
+        "type": "object"
+      },
+      "DiscoveryResultOut": {
+        "properties": {
+          "bluetooth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BluetoothSourceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "gps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GpsSourceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shared_count": {
+            "title": "Shared Count",
+            "type": "integer"
+          },
+          "shared_interests": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shared Interests",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "enum": [
+                "bluetooth",
+                "gps"
+              ],
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name",
+          "shared_interests",
+          "shared_count",
+          "sources"
+        ],
+        "title": "DiscoveryResultOut",
+        "type": "object"
+      },
+      "DiscoverySettingsIn": {
+        "description": "Separate opt-in switches; both off by default, independent of profile.",
+        "properties": {
+          "bluetooth_enabled": {
+            "title": "Bluetooth Enabled",
+            "type": "boolean"
+          },
+          "gps_enabled": {
+            "title": "Gps Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "bluetooth_enabled",
+          "gps_enabled"
+        ],
+        "title": "DiscoverySettingsIn",
+        "type": "object"
+      },
+      "DiscoveryTokenOut": {
+        "properties": {
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "token_value": {
+            "maximum": 65535.0,
+            "minimum": 0.0,
+            "title": "Token Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "token_value",
+          "device_id"
+        ],
+        "title": "DiscoveryTokenOut",
+        "type": "object"
+      },
+      "GpsReading": {
+        "properties": {
+          "fix_age_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Age Ms"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "source": {
+            "default": "wearable",
+            "enum": [
+              "wearable",
+              "phone"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "valid": {
+            "default": false,
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "title": "GpsReading",
+        "type": "object"
+      },
+      "GpsSourceOut": {
+        "properties": {
+          "distance_m": {
+            "title": "Distance M",
+            "type": "integer"
+          },
+          "freshness": {
+            "enum": [
+              "fresh",
+              "last_known"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "my_age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Age Seconds"
+          },
+          "their_age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Their Age Seconds"
+          }
+        },
+        "required": [
+          "distance_m",
+          "freshness",
+          "labels"
+        ],
+        "title": "GpsSourceOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HeartRateReading": {
+        "properties": {
+          "bpm": {
+            "anyOf": [
+              {
+                "maximum": 255.0,
+                "minimum": 20.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "valid",
+                  "warming_up",
+                  "no_contact",
+                  "invalid_signal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "valid": {
+            "default": false,
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "title": "HeartRateReading",
+        "type": "object"
+      },
+      "InteractionSnapshot": {
+        "properties": {
+          "active_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active User Id"
+          },
+          "completed_evidence_ms": {
+            "title": "Completed Evidence Ms",
+            "type": "integer"
+          },
+          "own_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Own Code"
+          },
+          "own_code_confirmed_by_partner": {
+            "default": false,
+            "title": "Own Code Confirmed By Partner",
+            "type": "boolean"
+          },
+          "own_code_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Own Code Expires At"
+          },
+          "own_code_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Own Code Version"
+          },
+          "partner_code_confirmed_by_me": {
+            "default": false,
+            "title": "Partner Code Confirmed By Me",
+            "type": "boolean"
+          },
+          "partner_code_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Code Expires At"
+          },
+          "partner_code_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Code Version"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "phase_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase Started At"
+          },
+          "progress_ms": {
+            "title": "Progress Ms",
+            "type": "integer"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "prompt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Id"
+          },
+          "prompt_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "truth",
+                  "dare"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Kind"
+          },
+          "quest_id": {
+            "enum": [
+              "together",
+              "explore",
+              "heart_challenge",
+              "raid"
+            ],
+            "title": "Quest Id",
+            "type": "string"
+          },
+          "results": {
+            "additionalProperties": true,
+            "title": "Results",
+            "type": "object"
+          },
+          "round_index": {
+            "default": 0,
+            "title": "Round Index",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "start",
+                  "end"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "target_ms": {
+            "title": "Target Ms",
+            "type": "integer"
+          },
+          "timing_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing Started At"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "quest_id",
+          "version",
+          "phase",
+          "progress_ms",
+          "target_ms",
+          "completed_evidence_ms"
+        ],
+        "title": "InteractionSnapshot",
+        "type": "object"
+      },
+      "InvitationCreateIn": {
+        "properties": {
+          "to_user_id": {
+            "format": "uuid",
+            "title": "To User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to_user_id"
+        ],
+        "title": "InvitationCreateIn",
+        "type": "object"
+      },
+      "InvitationOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "from_name": {
+            "title": "From Name",
+            "type": "string"
+          },
+          "from_user_id": {
+            "format": "uuid",
+            "title": "From User Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "responded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responded At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "to_name": {
+            "title": "To Name",
+            "type": "string"
+          },
+          "to_user_id": {
+            "format": "uuid",
+            "title": "To User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "from_user_id",
+          "from_name",
+          "to_user_id",
+          "to_name",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "InvitationOut",
+        "type": "object"
+      },
+      "InvitationsOut": {
+        "properties": {
+          "incoming": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationOut"
+            },
+            "title": "Incoming",
+            "type": "array"
+          },
+          "outgoing": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationOut"
+            },
+            "title": "Outgoing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "incoming",
+          "outgoing"
+        ],
+        "title": "InvitationsOut",
+        "type": "object"
+      },
+      "LandmarkOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "latitude": {
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "title": "Longitude",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "radius_m": {
+            "title": "Radius M",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "latitude",
+          "longitude",
+          "radius_m"
+        ],
+        "title": "LandmarkOut",
+        "type": "object"
+      },
+      "LandmarksOut": {
+        "properties": {
+          "landmarks": {
+            "items": {
+              "$ref": "#/components/schemas/LandmarkOut"
+            },
+            "title": "Landmarks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "landmarks"
+        ],
+        "title": "LandmarksOut",
+        "type": "object"
+      },
+      "LocationSharingIn": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "LocationSharingIn",
+        "type": "object"
+      },
+      "LoginIn": {
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginIn",
+        "type": "object"
+      },
+      "LoginOut": {
+        "properties": {
+          "csrf_token": {
+            "title": "Csrf Token",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          }
+        },
+        "required": [
+          "user",
+          "token",
+          "csrf_token",
+          "expires_at"
+        ],
+        "title": "LoginOut",
+        "type": "object"
+      },
+      "MeOut": {
+        "properties": {
+          "device": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeviceSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartnerSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PetSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          }
+        },
+        "required": [
+          "user"
+        ],
+        "title": "MeOut",
+        "type": "object"
+      },
+      "NoticeOut": {
+        "properties": {
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "NoticeOut",
+        "type": "object"
+      },
+      "ObservationAckOut": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accepted",
+          "duplicates"
+        ],
+        "title": "ObservationAckOut",
+        "type": "object"
+      },
+      "ObservationBatchIn": {
+        "properties": {
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/ObservationIn"
+            },
+            "minItems": 1,
+            "title": "Observations",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "observations"
+        ],
+        "title": "ObservationBatchIn",
+        "type": "object"
+      },
+      "ObservationIn": {
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "token": {
+            "maximum": 65535.0,
+            "minimum": 0.0,
+            "title": "Token",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "token",
+          "captured_at"
+        ],
+        "title": "ObservationIn",
+        "type": "object"
+      },
+      "ParticipantOut": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name",
+          "accepted"
+        ],
+        "title": "ParticipantOut",
+        "type": "object"
+      },
+      "PartnerPosition": {
+        "properties": {
+          "age_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Ms"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "latitude": {
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "title": "Longitude",
+            "type": "number"
+          },
+          "sharing_enabled": {
+            "title": "Sharing Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude",
+          "sharing_enabled"
+        ],
+        "title": "PartnerPosition",
+        "type": "object"
+      },
+      "PartnerSummary": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "location_sharing": {
+            "title": "Location Sharing",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "level",
+          "location_sharing"
+        ],
+        "title": "PartnerSummary",
+        "type": "object"
+      },
+      "PartnershipOut": {
+        "properties": {
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "ended_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "partner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartnerSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "since"
+        ],
+        "title": "PartnershipOut",
+        "type": "object"
+      },
+      "PeerObservation": {
+        "properties": {
+          "boot_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Boot Id"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "heartbeat_sequence": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat Sequence"
+          },
+          "observation_age_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Age Ms"
+          },
+          "observed": {
+            "default": false,
+            "title": "Observed",
+            "type": "boolean"
+          },
+          "session_token": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Token"
+          }
+        },
+        "title": "PeerObservation",
+        "type": "object"
+      },
+      "PetCareIn": {
+        "properties": {
+          "date": {
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "PetCareIn",
+        "type": "object"
+      },
+      "PetSummary": {
+        "description": "Server mirror of the wearable-owned pet. XP/level are authoritative\nhere; species/name/needs live on the wearable and are mirrored.",
+        "properties": {
+          "care_streak": {
+            "default": 0,
+            "title": "Care Streak",
+            "type": "integer"
+          },
+          "cared_today": {
+            "default": false,
+            "title": "Cared Today",
+            "type": "boolean"
+          },
+          "evolution_stage": {
+            "title": "Evolution Stage",
+            "type": "integer"
+          },
+          "last_care_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Care Date"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "lifetime_xp": {
+            "title": "Lifetime Xp",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "species": {
+            "anyOf": [
+              {
+                "enum": [
+                  "spark",
+                  "fluff",
+                  "pip"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Species"
+          }
+        },
+        "required": [
+          "level",
+          "lifetime_xp",
+          "evolution_stage"
+        ],
+        "title": "PetSummary",
+        "type": "object"
+      },
+      "PetUpdateIn": {
+        "properties": {
+          "name": {
+            "maxLength": 8,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9 ]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "species": {
+            "enum": [
+              "spark",
+              "fluff",
+              "pip"
+            ],
+            "title": "Species",
+            "type": "string"
+          }
+        },
+        "required": [
+          "species",
+          "name"
+        ],
+        "title": "PetUpdateIn",
+        "type": "object"
+      },
+      "PinRefreshIn": {
+        "properties": {
+          "command_id": {
+            "format": "uuid",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "start",
+              "end"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "command_id"
+        ],
+        "title": "PinRefreshIn",
+        "type": "object"
+      },
+      "PinSubmitIn": {
+        "properties": {
+          "code_version": {
+            "minimum": 1.0,
+            "title": "Code Version",
+            "type": "integer"
+          },
+          "command_id": {
+            "format": "uuid",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "pin": {
+            "pattern": "^[0-9]{4}$",
+            "title": "Pin",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "start",
+              "end"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "pin",
+          "code_version",
+          "command_id"
+        ],
+        "title": "PinSubmitIn",
+        "type": "object"
+      },
+      "PurchaseIn": {
+        "properties": {
+          "reward_id": {
+            "title": "Reward Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reward_id"
+        ],
+        "title": "PurchaseIn",
+        "type": "object"
+      },
+      "PurchaseOut": {
+        "properties": {
+          "balance_after": {
+            "title": "Balance After",
+            "type": "integer"
+          },
+          "owned": {
+            "title": "Owned",
+            "type": "boolean"
+          },
+          "price": {
+            "title": "Price",
+            "type": "integer"
+          },
+          "reward_id": {
+            "title": "Reward Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reward_id",
+          "price",
+          "balance_after",
+          "owned"
+        ],
+        "title": "PurchaseOut",
+        "type": "object"
+      },
+      "QuestOut": {
+        "properties": {
+          "demo_duration_ms": {
+            "title": "Demo Duration Ms",
+            "type": "integer"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "evidence": {
+            "title": "Evidence",
+            "type": "string"
+          },
+          "geofence_configured": {
+            "title": "Geofence Configured",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "normal_duration_ms": {
+            "title": "Normal Duration Ms",
+            "type": "integer"
+          },
+          "quest_id": {
+            "enum": [
+              "together",
+              "explore",
+              "heart_challenge",
+              "raid"
+            ],
+            "title": "Quest Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quest_id",
+          "name",
+          "description",
+          "evidence",
+          "normal_duration_ms",
+          "demo_duration_ms",
+          "geofence_configured"
+        ],
+        "title": "QuestOut",
+        "type": "object"
+      },
+      "QuestsOut": {
+        "properties": {
+          "quests": {
+            "items": {
+              "$ref": "#/components/schemas/QuestOut"
+            },
+            "title": "Quests",
+            "type": "array"
+          }
+        },
+        "required": [
+          "quests"
+        ],
+        "title": "QuestsOut",
+        "type": "object"
+      },
+      "RaidOutcomeIn": {
+        "properties": {
+          "command_id": {
+            "format": "uuid",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "fight_ended_at": {
+            "format": "date-time",
+            "title": "Fight Ended At",
+            "type": "string"
+          },
+          "fight_started_at": {
+            "format": "date-time",
+            "title": "Fight Started At",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "win",
+              "lose"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "fight_started_at",
+          "fight_ended_at",
+          "command_id"
+        ],
+        "title": "RaidOutcomeIn",
+        "type": "object"
+      },
+      "RewardOut": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owned": {
+            "title": "Owned",
+            "type": "boolean"
+          },
+          "price": {
+            "title": "Price",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "price",
+          "owned"
+        ],
+        "title": "RewardOut",
+        "type": "object"
+      },
+      "RewardsOut": {
+        "properties": {
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "rewards": {
+            "items": {
+              "$ref": "#/components/schemas/RewardOut"
+            },
+            "title": "Rewards",
+            "type": "array"
+          }
+        },
+        "required": [
+          "points",
+          "rewards"
+        ],
+        "title": "RewardsOut",
+        "type": "object"
+      },
+      "ServerTimeOut": {
+        "properties": {
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          },
+          "unix_ms": {
+            "title": "Unix Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "server_time",
+          "unix_ms"
+        ],
+        "title": "ServerTimeOut",
+        "type": "object"
+      },
+      "SessionBrief": {
+        "properties": {
+          "demo": {
+            "title": "Demo",
+            "type": "boolean"
+          },
+          "interaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InteractionSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress_ms": {
+            "title": "Progress Ms",
+            "type": "integer"
+          },
+          "quest_id": {
+            "enum": [
+              "together",
+              "explore",
+              "heart_challenge",
+              "raid"
+            ],
+            "title": "Quest Id",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "target_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Ms"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "session_id",
+          "quest_id",
+          "demo",
+          "state",
+          "token",
+          "target_ms",
+          "progress_ms"
+        ],
+        "title": "SessionBrief",
+        "type": "object"
+      },
+      "SessionCreateIn": {
+        "properties": {
+          "demo": {
+            "default": true,
+            "title": "Demo",
+            "type": "boolean"
+          },
+          "landmark_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landmark Id"
+          },
+          "quest_id": {
+            "enum": [
+              "together",
+              "explore",
+              "raid"
+            ],
+            "title": "Quest Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quest_id"
+        ],
+        "title": "SessionCreateIn",
+        "type": "object"
+      },
+      "SessionOut": {
+        "properties": {
+          "activated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated At"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "demo": {
+            "title": "Demo",
+            "type": "boolean"
+          },
+          "geofence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geofence"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "landmark": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landmark"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ParticipantOut"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "progress_ms": {
+            "title": "Progress Ms",
+            "type": "integer"
+          },
+          "quest_id": {
+            "enum": [
+              "together",
+              "explore",
+              "heart_challenge",
+              "raid"
+            ],
+            "title": "Quest Id",
+            "type": "string"
+          },
+          "raid_outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "win",
+                  "lose"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raid Outcome"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "completed",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "target_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Ms"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "id",
+          "quest_id",
+          "demo",
+          "state",
+          "created_by",
+          "created_at",
+          "progress_ms",
+          "participants"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
+      "SessionsOut": {
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionOut"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions"
+        ],
+        "title": "SessionsOut",
+        "type": "object"
+      },
+      "TelemetryAckOut": {
+        "properties": {
+          "accepted": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptedIdentity"
+            },
+            "title": "Accepted",
+            "type": "array"
+          },
+          "duplicates": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptedIdentity"
+            },
+            "title": "Duplicates",
+            "type": "array"
+          },
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          },
+          "state_version": {
+            "title": "State Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "server_time",
+          "accepted",
+          "duplicates",
+          "state_version"
+        ],
+        "title": "TelemetryAckOut",
+        "type": "object"
+      },
+      "TelemetryBatchIn": {
+        "properties": {
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/TelemetryRecordIn"
+            },
+            "minItems": 1,
+            "title": "Records",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "device_id",
+          "records"
+        ],
+        "title": "TelemetryBatchIn",
+        "type": "object"
+      },
+      "TelemetryRecordIn": {
+        "properties": {
+          "boot_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Boot Id",
+            "type": "string"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "clock": {
+            "$ref": "#/components/schemas/ClockInfo"
+          },
+          "gps": {
+            "$ref": "#/components/schemas/GpsReading"
+          },
+          "heart_rate": {
+            "$ref": "#/components/schemas/HeartRateReading"
+          },
+          "peer": {
+            "$ref": "#/components/schemas/PeerObservation"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "uptime_ms": {
+            "minimum": 0.0,
+            "title": "Uptime Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boot_id",
+          "sequence",
+          "uptime_ms",
+          "clock"
+        ],
+        "title": "TelemetryRecordIn",
+        "type": "object"
+      },
+      "TransactionOut": {
+        "properties": {
+          "balance_after": {
+            "title": "Balance After",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delta": {
+            "title": "Delta",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "reward_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reward Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "xp_delta": {
+            "title": "Xp Delta",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "delta",
+          "xp_delta",
+          "balance_after",
+          "created_at"
+        ],
+        "title": "TransactionOut",
+        "type": "object"
+      },
+      "TransactionsOut": {
+        "properties": {
+          "transactions": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionOut"
+            },
+            "title": "Transactions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transactions"
+        ],
+        "title": "TransactionsOut",
+        "type": "object"
+      },
+      "UserSummary": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "lifetime_xp": {
+            "title": "Lifetime Xp",
+            "type": "integer"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "points",
+          "lifetime_xp",
+          "level"
+        ],
+        "title": "UserSummary",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Two-wearable quest prototype backend. Contract: docs/INTERFACES.md.",
+    "title": "Catch Me API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/devices/bind": {
+      "post": {
+        "description": "Bind a preprovisioned wearable using its one-time pairing credential.",
+        "operationId": "bind_device_api_v1_devices_bind_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bind Device",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/devices/{device_id}/state": {
+      "get": {
+        "description": "Authorized session/partner summary for the phone to relay to the wearable.",
+        "operationId": "device_state_api_v1_devices__device_id__state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device State",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/discovery/observations": {
+      "post": {
+        "description": "Idempotent upload of direct wearable scan observations.\n\nIdentity is (observer, token, captured_at): a retransmitted observation\nis a duplicate and cannot refresh presence; only a new physical\nreception (new captured_at) can. Old rows are pruned past a generous\nwindow; presence itself is derived at query time from the 15 s rule.",
+        "operationId": "upload_observations_api_v1_discovery_observations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObservationBatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationAckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Observations",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "operationId": "events_api_v1_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Events",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/invitations": {
+      "get": {
+        "operationId": "list_invitations_api_v1_invitations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Invitations",
+        "tags": [
+          "partnerships"
+        ]
+      },
+      "post": {
+        "operationId": "create_invitation_api_v1_invitations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Invitation",
+        "tags": [
+          "partnerships"
+        ]
+      }
+    },
+    "/api/v1/invitations/{invitation_id}/accept": {
+      "post": {
+        "operationId": "accept_invitation_api_v1_invitations__invitation_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnershipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Invitation",
+        "tags": [
+          "partnerships"
+        ]
+      }
+    },
+    "/api/v1/invitations/{invitation_id}/decline": {
+      "post": {
+        "operationId": "decline_invitation_api_v1_invitations__invitation_id__decline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decline Invitation",
+        "tags": [
+          "partnerships"
+        ]
+      }
+    },
+    "/api/v1/landmarks": {
+      "get": {
+        "operationId": "list_landmarks_api_v1_landmarks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LandmarksOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Landmarks",
+        "tags": [
+          "pet"
+        ]
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "operationId": "me_api_v1_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/discovery": {
+      "get": {
+        "operationId": "get_discovery_api_v1_me_discovery_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Discovery",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/api/v1/me/discovery-profile": {
+      "get": {
+        "operationId": "get_discovery_profile_api_v1_me_discovery_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Discovery Profile",
+        "tags": [
+          "discovery"
+        ]
+      },
+      "put": {
+        "description": "Edit display name + discovery profile fields atomically.",
+        "operationId": "put_discovery_profile_api_v1_me_discovery_profile_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoveryProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Discovery Profile",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/api/v1/me/discovery-settings": {
+      "put": {
+        "description": "Flip the separate Bluetooth/GPS discovery opt-ins.\n\nThe server suppresses an opted-out user immediately on every query,\nregardless of device connectivity; the phone relays the change to the\nwearable's radio on its next link.",
+        "operationId": "put_discovery_settings_api_v1_me_discovery_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverySettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Discovery Settings",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/api/v1/me/discovery-token": {
+      "post": {
+        "description": "Return the bound wearable's live discovery token, creating one if\nabsent. rotate=true invalidates the previous value (also done on device\nunbind/reassignment). Provisioned only through this authenticated link.",
+        "operationId": "provision_discovery_token_api_v1_me_discovery_token_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "rotate",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Rotate",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryTokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Provision Discovery Token",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/api/v1/me/location-sharing": {
+      "put": {
+        "operationId": "set_location_sharing_api_v1_me_location_sharing_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocationSharingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Location Sharing",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/partnership": {
+      "delete": {
+        "operationId": "end_partnership_api_v1_me_partnership_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnershipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "End Partnership",
+        "tags": [
+          "partnerships"
+        ]
+      },
+      "get": {
+        "operationId": "my_partnership_api_v1_me_partnership_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnershipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Partnership",
+        "tags": [
+          "partnerships"
+        ]
+      }
+    },
+    "/api/v1/me/pet": {
+      "get": {
+        "operationId": "get_pet_api_v1_me_pet_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PetSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Pet",
+        "tags": [
+          "pet"
+        ]
+      },
+      "put": {
+        "description": "Mirror the wearable's bonding choice. Cosmetic only \u2014 no XP/points.",
+        "operationId": "update_pet_api_v1_me_pet_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PetUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PetSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Pet",
+        "tags": [
+          "pet"
+        ]
+      }
+    },
+    "/api/v1/me/pet/care": {
+      "post": {
+        "description": "Claim the daily care XP: +10 XP at most once per user per calendar day.\n\nThe wearable performs care locally and relays the event through the phone;\noffline days sync later but the server cap is absolute. Idempotent per\n(user, date) via the PointTransaction unique key.",
+        "operationId": "pet_care_api_v1_me_pet_care_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PetCareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PetSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pet Care",
+        "tags": [
+          "pet"
+        ]
+      }
+    },
+    "/api/v1/purchases": {
+      "post": {
+        "operationId": "purchase_api_v1_purchases_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purchase",
+        "tags": [
+          "rewards"
+        ]
+      }
+    },
+    "/api/v1/quests": {
+      "get": {
+        "operationId": "quests_api_v1_quests_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Quests",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/rewards": {
+      "get": {
+        "operationId": "rewards_api_v1_rewards_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RewardsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rewards",
+        "tags": [
+          "rewards"
+        ]
+      }
+    },
+    "/api/v1/sessions": {
+      "get": {
+        "operationId": "list_sessions_api_v1_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Sessions",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "operationId": "create_session_api_v1_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}": {
+      "get": {
+        "operationId": "get_session_api_v1_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/accept": {
+      "post": {
+        "operationId": "accept_session_api_v1_sessions__session_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/cancel": {
+      "post": {
+        "operationId": "cancel_session_api_v1_sessions__session_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/interaction": {
+      "get": {
+        "operationId": "get_interaction_api_v1_sessions__session_id__interaction_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Interaction",
+        "tags": [
+          "session interactions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/interaction/pin/refresh": {
+      "post": {
+        "operationId": "post_pin_refresh_api_v1_sessions__session_id__interaction_pin_refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinRefreshIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Pin Refresh",
+        "tags": [
+          "session interactions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/interaction/pin/submit": {
+      "post": {
+        "operationId": "post_pin_api_v1_sessions__session_id__interaction_pin_submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinSubmitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Pin",
+        "tags": [
+          "session interactions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/raid/outcome": {
+      "post": {
+        "description": "One board's verified fight report. Completion requires BOTH\nparticipants' reports; awards require both to report 'win' (a lost raid\ncompletes honestly with no award). Idempotent per command id and one\nreport per reporter.",
+        "operationId": "post_raid_outcome_api_v1_sessions__session_id__raid_outcome_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RaidOutcomeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Raid Outcome",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/readings": {
+      "get": {
+        "description": "Recent heart-rate readings for the live web graph (both participants).\n\nHonesty rules: invalid readings are returned with valid=false and their\nstatus; the graph shows gaps instead of interpolating.",
+        "operationId": "session_readings_api_v1_sessions__session_id__readings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "seconds",
+            "required": false,
+            "schema": {
+              "default": 120,
+              "title": "Seconds",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Readings",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/telemetry/batches": {
+      "post": {
+        "operationId": "ingest_batch_api_v1_telemetry_batches_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelemetryBatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelemetryAckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Batch",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/time": {
+      "get": {
+        "operationId": "server_time_api_v1_time_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerTimeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Server Time",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/transactions": {
+      "get": {
+        "operationId": "transactions_api_v1_transactions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Transactions",
+        "tags": [
+          "rewards"
+        ]
+      }
+    }
+  }
+}

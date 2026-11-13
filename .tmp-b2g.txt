@@ -1,0 +1,32 @@
+[1793731653.274] app: serial attached
+[1793731653.274] app: flash queue init
+[1793731653.275] fq: flash.begin
+[1793731653.275] fq: begin FAIL
+[1793731653.276] flash: no W25Q shield - using internal flash queue
+[1793731653.276] boot_id=d2-i34
+[1793731653.276] app: gps init
+[1793731656.526] app: pulse init
+[1793731656.537] pulse: MAX30101 not found on any adapter port
+[1793731656.537] app: ui init
+[1793731656.563] app: ble init
+[1793731656.588] catch_me device 2 up, fw 1
+[1793731656.588] app: boot reason: power-on
+[1793731656.593] app: watchdog on (16s)
+[1793731656.603] ble: -> ADVERTISING
+[1793731656.607] ble: adv on cnt=1
+[1793731656.608] queue full: backup copies dropped (records still sent live)
+[1793731656.617] STAT up=20 phone=0 peers=0 q=248 gps_chars=0
+[1793731657.659] ble: phone connected
+[1793731658.328] HELLO -> STATUS send=ok
+[1793731658.459] time anchor epoch=1793731658 unc=500
+[1793731658.550] ble: partner=Miya dist=-1
+[1793731658.753] ble: discovery mode=0 token=0
+[1793731661.608] STAT up=25 phone=1 peers=0 q=242 gps_chars=0
+[1793731662.093] ble: session active=1 completion_flag=0
+[1793731662.813] ble: INTERACTION len=58 ver=1
+[1793731662.837] ble: disconnected handle=2049
+[1793731662.837] ble: -> SCANNING
+[1793731662.839] ble: -> ADVERTISING
+[1793731662.842] ble: adv on cnt=2
+[1793731665.148] ble: -> SCANNING
+[1793731665.150] ble: discovery started

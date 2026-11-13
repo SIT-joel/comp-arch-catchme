@@ -1,0 +1,45 @@
+[1793769291.930] app: serial attached
+[1793769291.930] app: flash queue init
+[1793769291.931] fq: flash.begin
+[1793769291.931] fq: jedec 0xEF4014
+[1793769291.959] fq: header rewritten for new boot
+[1793769291.959] boot_id=d1-127
+[1793769291.959] app: gps init
+[1793769292.059] app: pulse init
+[1793769292.078] pulse: MAX30101 on adapter port 3
+[1793769292.078] app: ui init
+[1793769292.104] app: ble init
+[1793769292.128] catch_me device 1 up, fw 1
+[1793769292.129] app: boot reason: WATCHDOG (previous life 0 ms)
+[1793769292.134] app: watchdog on (16s)
+[1793769292.144] ble: -> ADVERTISING
+[1793769292.148] ble: adv on cnt=1
+[1793769293.659] ble: -> SCANNING
+[1793769293.660] ble: discovery started
+[1793769294.474] STAT up=5 phone=0 peers=1 q=214 gps_chars=187
+[1793769295.674] ble: -> ADVERTISING
+[1793769295.676] ble: adv on cnt=2
+[1793769297.180] ble: -> SCANNING
+[1793769297.180] ble: discovery started
+[1793769299.192] ble: -> ADVERTISING
+[1793769299.194] ble: adv on cnt=3
+[1793769299.484] STAT up=10 phone=0 peers=1 q=219 gps_chars=833
+[1793769300.520] ble: phone connected
+[1793769304.494] STAT up=15 phone=1 peers=1 q=212 gps_chars=1479
+[1793769305.550] ble: disconnected handle=2049
+[1793769305.551] ble: -> SCANNING
+[1793769305.551] ble: -> ADVERTISING
+[1793769305.553] ble: adv on cnt=4
+[1793769305.711] ble: phone connected
+[1793769308.376] ble: notify fail 0x64
+[1793769309.381] ble: notify fail 0x64
+[1793769309.504] STAT up=20 phone=1 peers=1 q=204 gps_chars=2125
+[1793769310.391] ble: notify fail 0x64
+[1793769311.064] ble: disconnected handle=2050
+[1793769311.064] ble: -> SCANNING
+[1793769311.065] ble: -> ADVERTISING
+[1793769311.068] ble: adv on cnt=5
+[1793769312.130] ble: phone connected
+[1793769314.514] STAT up=25 phone=1 peers=1 q=198 gps_chars=2771
+[1793769315.431] ble: notify fail 0x64
+[1793769316.424] ble: notify fail 0x64

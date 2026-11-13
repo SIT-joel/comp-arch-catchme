@@ -1,0 +1,92 @@
+[1793729570.622] ble: -> ADVERTISING
+[1793729570.625] ble: adv on cnt=9
+[1793729571.097] STAT up=89 phone=0 peers=7 q=248 gps_chars=0
+[1793729572.924] ble: -> SCANNING
+[1793729572.926] ble: discovery started
+[1793729574.935] ble: -> ADVERTISING
+[1793729574.939] ble: adv on cnt=10
+[1793729576.102] STAT up=94 phone=0 peers=8 q=248 gps_chars=0
+[1793729576.294] queue full: backup copies dropped (records still sent live)
+[1793729577.238] ble: -> SCANNING
+[1793729577.240] ble: discovery started
+[1793729579.240] ble: -> ADVERTISING
+[1793729579.243] ble: adv on cnt=11
+[1793729581.109] STAT up=99 phone=0 peers=9 q=248 gps_chars=0
+[1793729581.543] ble: -> SCANNING
+[1793729581.545] ble: discovery started
+[1793729583.553] ble: -> ADVERTISING
+[1793729583.557] ble: adv on cnt=12
+[1793729585.855] ble: -> SCANNING
+[1793729585.856] ble: discovery started
+[1793729586.118] STAT up=104 phone=0 peers=10 q=248 gps_chars=0
+[1793729586.339] queue full: backup copies dropped (records still sent live)
+[1793729587.864] ble: -> ADVERTISING
+[1793729587.868] ble: adv on cnt=13
+[1793729590.166] ble: -> SCANNING
+[1793729590.168] ble: discovery started
+[1793729591.122] STAT up=109 phone=0 peers=11 q=248 gps_chars=0
+[1793729592.169] ble: -> ADVERTISING
+[1793729592.172] ble: adv on cnt=14
+[1793729594.471] ble: -> SCANNING
+[1793729594.472] ble: discovery started
+[1793729596.127] STAT up=114 phone=0 peers=13 q=248 gps_chars=0
+[1793729596.389] queue full: backup copies dropped (records still sent live)
+[1793729596.482] ble: -> ADVERTISING
+[1793729596.485] ble: adv on cnt=15
+[1793729598.783] ble: -> SCANNING
+[1793729598.785] ble: discovery started
+[1793729600.795] ble: -> ADVERTISING
+[1793729600.798] ble: adv on cnt=16
+[1793729601.130] STAT up=119 phone=0 peers=14 q=248 gps_chars=0
+[1793729603.097] ble: -> SCANNING
+[1793729603.099] ble: discovery started
+[1793729605.107] ble: -> ADVERTISING
+[1793729605.110] ble: adv on cnt=17
+[1793729606.134] STAT up=124 phone=0 peers=15 q=248 gps_chars=0
+[1793729606.445] queue full: backup copies dropped (records still sent live)
+[1793729607.409] ble: -> SCANNING
+[1793729607.410] ble: discovery started
+[1793729609.418] ble: -> ADVERTISING
+[1793729609.421] ble: adv on cnt=18
+[1793729611.137] STAT up=129 phone=0 peers=16 q=248 gps_chars=0
+[1793729611.721] ble: -> SCANNING
+[1793729611.723] ble: discovery started
+[1793729613.730] ble: -> ADVERTISING
+[1793729613.734] ble: adv on cnt=19
+[1793729616.032] ble: -> SCANNING
+[1793729616.034] ble: discovery started
+[1793729616.145] STAT up=134 phone=0 peers=18 q=248 gps_chars=0
+[1793729616.497] queue full: backup copies dropped (records still sent live)
+[1793729618.033] ble: -> ADVERTISING
+[1793729618.036] ble: adv on cnt=20
+[1793729620.334] ble: -> SCANNING
+[1793729620.336] ble: discovery started
+[1793729621.150] STAT up=139 phone=0 peers=19 q=248 gps_chars=0
+[1793729622.336] ble: -> ADVERTISING
+[1793729622.339] ble: adv on cnt=21
+[1793729624.637] ble: -> SCANNING
+[1793729624.640] ble: discovery started
+[1793729626.154] STAT up=144 phone=0 peers=19 q=248 gps_chars=0
+[1793729626.546] queue full: backup copies dropped (records still sent live)
+[1793729626.639] ble: -> ADVERTISING
+[1793729626.643] ble: adv on cnt=22
+[1793729628.941] ble: -> SCANNING
+[1793729628.942] ble: discovery started
+[1793729630.951] ble: -> ADVERTISING
+[1793729630.955] ble: adv on cnt=23
+[1793729631.156] STAT up=149 phone=0 peers=21 q=248 gps_chars=0
+[1793729633.253] ble: -> SCANNING
+[1793729633.255] ble: discovery started
+[1793729635.265] ble: -> ADVERTISING
+[1793729635.269] ble: adv on cnt=24
+[1793729636.162] STAT up=154 phone=0 peers=22 q=248 gps_chars=0
+[1793729636.574] queue full: backup copies dropped (records still sent live)
+[1793729637.568] ble: -> SCANNING
+[1793729637.569] ble: discovery started
+[1793729639.577] ble: -> ADVERTISING
+[1793729639.580] ble: adv on cnt=25
+[1793729641.165] STAT up=159 phone=0 peers=23 q=248 gps_chars=0
+[1793729641.879] ble: -> SCANNING
+[1793729641.881] ble: discovery started
+[1793729643.888] ble: -> ADVERTISING
+[1793729643.891] ble: adv on cnt=26

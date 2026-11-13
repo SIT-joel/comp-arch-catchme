@@ -1,0 +1,73 @@
+# Catch Me local development / single-host deployment stack.
+# PostgreSQL + FastAPI + static web build behind one reverse proxy origin.
+# Production: put TLS on the proxy (see infra/README.md) and set CM_COOKIE_SECURE=true.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: catch_me
+      POSTGRES_PASSWORD: catch_me
+      POSTGRES_DB: catch_me
+    volumes:
+      - catch_me_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catch_me -d catch_me"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Not published in deployment; for local development only:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/api.Dockerfile
+    # Uses the long-lived dev database container (all accounts/pets/sessions)
+    # via the host's loopback-published 5432. Docker Desktop's
+    # host.docker.internal reaches host-loopback services.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      CM_DATABASE_URL: postgresql+psycopg://catch_me:catch_me@host.docker.internal:5432/catch_me
+      CM_COOKIE_SECURE: "${CM_COOKIE_SECURE:-false}"
+      # Bench geofence (same values as the dev server's env; empty strings
+      # break pydantic float parsing, so defaults live here explicitly).
+      CM_GEOFENCE_LAT: "${CM_GEOFENCE_LAT:-1.4335105}"
+      CM_GEOFENCE_LON: "${CM_GEOFENCE_LON:-103.7766169}"
+      CM_GEOFENCE_RADIUS_M: "${CM_GEOFENCE_RADIUS_M:-200}"
+      CM_RAID_FIX_MAX_AGE_MS: "${CM_RAID_FIX_MAX_AGE_MS:-900000}"
+    # Single worker: in-memory SSE fan-out assumes one process (docs/ARCHITECTURE.md).
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/web.Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+  # Cloudflare Tunnel (token-run; remotely managed ingress). The Zero Trust
+  # dashboard's public-hostname entry should point at
+  #   http://host.docker.internal:8000
+  # which reaches the FastAPI server on the host (dev: uvicorn on :8000;
+  # deploy: the api service above). infra/.env supplies SUBDOMAIN, TOKEN,
+  # CLIENT_ID and CLIENT_SECRET (Access service token for API clients).
+  # SUBDOMAIN is informational here — the hostname binding lives in the
+  # dashboard for token-managed tunnels.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    env_file:
+      - .env
+    command: tunnel --no-autoupdate run --token ${TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  catch_me_pgdata:

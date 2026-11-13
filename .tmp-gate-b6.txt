@@ -1,0 +1,503 @@
+app: serial attached
+app: flash queue init
+fq: flash.begin
+fq: begin FAIL
+flash: no W25Q shield - using internal flash queue
+DIAGNOSTIC: internal queue PUSHES disabled (watchdog triage); unlinked records are dropped, live sends unaffected
+boot_id=d2-i1
+app: gps init SKIPPED (v2: phone GPS is the location source)
+app: pulse init SKIPPED (v2: heart quest removed)
+app: pet init
+pet_store: backend=internal counter=0 loaded=0
+pet_core: species=-1 name=(unnamed) stage=0
+app: ui init
+app: ble init
+catch_me device 2 up, fw 1
+app: boot reason: system request
+GATE: armed (suspends TDD; central connects in 5 s)
+GATE: my writable attr (uart_tx_char_handle+1)=14
+app: watchdog on (16s)
+GATE: vendor ecode=0x1
+ble: -> ADVERTISING
+ble: adv on cnt=1
+GATE: peripheral advertising on (single set_discoverable)
+queue full: backup copies dropped (records still sent live)
+STAT up=37 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=2
+ble: adv on cnt=3
+ble: adv on cnt=4
+STAT up=42 phone=0 peers=0 q=0 gps_chars=0
+ble: phone connected
+GATE: peripheral rx_writes=0
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+STAT up=47 phone=1 peers=0 q=0 gps_chars=0
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+STAT up=52 phone=1 peers=0 q=0 gps_chars=0
+GATE: vendor ecode=0xC01
+GATE: peripheral rx_writes=98
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+STAT up=57 phone=1 peers=0 q=0 gps_chars=0
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+STAT up=62 phone=1 peers=0 q=0 gps_chars=0
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: peripheral rx_writes=197
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+STAT up=67 phone=1 peers=0 q=0 gps_chars=0
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+STAT up=72 phone=1 peers=0 q=0 gps_chars=0
+GATE: vendor ecode=0xC01
+GATE: peripheral rx_writes=295
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+GATE: vendor ecode=0xC01
+[capture error: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22)); reopening]
+app: serial attached
+app: flash queue init
+fq: flash.begin
+fq: begin FAIL
+flash: no W25Q shield - using internal flash queue
+DIAGNOSTIC: internal queue PUSHES disabled (watchdog triage); unlinked records are dropped, live sends unaffected
+boot_id=d2-i2
+app: gps init SKIPPED (v2: phone GPS is the location source)
+app: pulse init SKIPPED (v2: heart quest removed)
+app: pet init
+pet_store: backend=internal counter=0 loaded=0
+pet_core: species=-1 name=(unnamed) stage=0
+app: ui init
+app: ble init
+catch_me device 2 up, fw 1
+app: boot reason: WATCHDOG (previous life 0 ms)
+GATE: armed (suspends TDD; central connects in 5 s)
+GATE: my writable attr (uart_tx_char_handle+1)=14
+app: watchdog on (16s)
+GATE: vendor ecode=0x1
+ble: -> ADVERTISING
+ble: adv on cnt=1
+GATE: peripheral advertising on (single set_discoverable)
+ble: adv on cnt=2
+ble: adv on cnt=3
+STAT up=5 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=4
+ble: adv on cnt=5
+ble: adv on cnt=6
+STAT up=10 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=7
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=8
+ble: adv on cnt=9
+ble: adv on cnt=10
+STAT up=15 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=11
+ble: adv on cnt=12
+ble: adv on cnt=13
+ble: adv on cnt=14
+STAT up=20 phone=0 peers=0 q=0 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=15
+ble: adv on cnt=16
+ble: adv on cnt=17
+STAT up=25 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=18
+ble: adv on cnt=19
+ble: adv on cnt=20
+ble: adv on cnt=21
+STAT up=30 phone=0 peers=0 q=0 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=22
+ble: adv on cnt=23
+ble: adv on cnt=24
+STAT up=35 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=25
+ble: adv on cnt=26
+ble: adv on cnt=27
+ble: adv on cnt=28
+STAT up=40 phone=0 peers=0 q=0 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=29
+ble: adv on cnt=30
+ble: adv on cnt=31
+STAT up=45 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=32
+ble: adv on cnt=33
+ble: adv on cnt=34
+ble: adv on cnt=35
+STAT up=50 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=36
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=37
+ble: adv on cnt=38
+STAT up=55 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=39
+ble: adv on cnt=40
+ble: adv on cnt=41
+ble: adv on cnt=42
+STAT up=60 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=43
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=44
+ble: adv on cnt=45
+ble: adv on cnt=46
+STAT up=65 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=47
+ble: adv on cnt=48
+ble: adv on cnt=49
+STAT up=70 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=50
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=51
+ble: adv on cnt=52
+ble: adv on cnt=53
+STAT up=75 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=54
+ble: adv on cnt=55
+ble: adv on cnt=56
+STAT up=80 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=57
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=58
+ble: adv on cnt=59
+ble: adv on cnt=60
+STAT up=85 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=61
+ble: adv on cnt=62
+ble: adv on cnt=63
+STAT up=90 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=64
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=65
+ble: adv on cnt=66
+ble: adv on cnt=67
+STAT up=95 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=68
+ble: adv on cnt=69
+ble: adv on cnt=70
+STAT up=100 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=71
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=72
+ble: adv on cnt=73
+ble: adv on cnt=74
+STAT up=105 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=75
+ble: adv on cnt=76
+ble: adv on cnt=77
+ble: adv on cnt=78
+STAT up=110 phone=0 peers=0 q=0 gps_chars=0
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=79
+ble: adv on cnt=80
+ble: adv on cnt=81
+STAT up=115 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=82
+ble: adv on cnt=83
+ble: adv on cnt=84
+ble: adv on cnt=85
+STAT up=120 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=86
+queue full: backup copies dropped (records still sent live)
+ble: adv on cnt=87
+ble: adv on cnt=88
+STAT up=125 phone=0 peers=0 q=0 gps_chars=0
+ble: adv on cnt=89

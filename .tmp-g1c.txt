@@ -1,0 +1,21 @@
+[1793907293.764] app: serial attached
+[1793907293.765] app: flash queue init
+[1793907293.765] fq: flash.begin
+[1793907293.765] fq: jedec 0xEF4014
+[1793907293.794] fq: header rewritten for new boot
+[1793907293.794] boot_id=d1-143
+[1793907293.795] app: gps init SKIPPED (v2: phone GPS is the location source)
+[1793907293.795] app: pulse init SKIPPED (v2: heart quest removed)
+[1793907293.795] app: pet init
+[1793907293.796] pet_store: backend=w25q counter=0 loaded=0
+[1793907293.796] pet_core: species=-1 name=(unnamed) stage=0
+[1793907293.797] app: ui init
+[1793907293.822] app: ble init
+[1793907293.848] catch_me device 1 up, fw 1
+[1793907293.848] app: boot reason: system request
+[1793907293.849] GATE: armed (suspends TDD; central connects in 5 s)
+[1793907293.854] app: watchdog on (16s)
+[1793907293.904] STAT up=33 phone=0 peers=0 q=289 gps_chars=0
+[1793907298.865] GATE: create_connection sent
+[1793907298.865] STAT up=38 phone=0 peers=0 q=293 gps_chars=0
+[1793907303.866] STAT up=43 phone=0 peers=0 q=298 gps_chars=0

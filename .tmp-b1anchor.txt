@@ -1,0 +1,33 @@
+[1793768998.456] STAT up=1402 phone=1 peers=38 q=185 gps_chars=179190
+[1793769001.403] ble: notify fail 0x64
+[1793769002.087] ble: disconnected handle=2236
+[1793769002.088] ble: -> SCANNING
+[1793769002.088] ble: -> ADVERTISING
+[1793769002.090] ble: adv on cnt=278
+[1793769002.369] ble: phone connected
+[1793769003.486] STAT up=1407 phone=1 peers=38 q=179 gps_chars=179836
+[1793769007.428] ble: notify fail 0x64
+[1793769007.741] ble: disconnected handle=2237
+[1793769007.742] ble: -> SCANNING
+[1793769007.742] ble: -> ADVERTISING
+[1793769007.744] ble: adv on cnt=279
+[1793769008.497] STAT up=1412 phone=0 peers=38 q=173 gps_chars=180482
+[1793769009.252] ble: -> SCANNING
+[1793769009.253] ble: discovery started
+[1793769011.265] ble: -> ADVERTISING
+[1793769011.268] ble: adv on cnt=280
+[1793769011.948] ble: phone connected
+[1793769013.548] STAT up=1417 phone=1 peers=38 q=172 gps_chars=181128
+[1793769014.471] ble: notify fail 0x64
+[1793769015.477] ble: notify fail 0x64
+[1793769016.483] ble: notify fail 0x64
+[1793769017.139] ble: disconnected handle=2238
+[1793769017.139] ble: -> SCANNING
+[1793769017.140] ble: -> ADVERTISING
+[1793769017.142] ble: adv on cnt=281
+[1793769018.558] STAT up=1422 phone=0 peers=38 q=171 gps_chars=181774
+[1793769018.649] ble: -> SCANNING
+[1793769018.649] ble: discovery started
+[1793769020.662] ble: -> ADVERTISING
+[1793769020.664] ble: adv on cnt=282
+[1793769021.203] ble: phone connected

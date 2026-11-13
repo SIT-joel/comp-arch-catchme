@@ -1,0 +1,8 @@
+[1793731583.365] open attempt 1 failed: could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+[1793731584.865] open attempt 2 failed: could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+[1793731586.365] open attempt 3 failed: could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+[1793731587.866] open attempt 4 failed: could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+[1793731589.366] open attempt 5 failed: could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+[1793731590.867] open attempt 6 failed: could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+[1793731592.367] open attempt 7 failed: could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+[1793731593.867] open attempt 8 failed: could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
