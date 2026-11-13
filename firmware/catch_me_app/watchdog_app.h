@@ -32,4 +32,8 @@ const char* boot_reason();
 
 // Call from loop() every few seconds: records the liveness marker.
 void note_alive(uint32_t now_ms);
+
+// Previous life's last known uptime in ms (0 when unknown). Real values
+// require the .noinit linker fix (see crash_diag.h, docs/PROGRESS.md).
+uint32_t previous_life_ms();
 }  // namespace wdt

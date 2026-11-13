@@ -70,4 +70,8 @@ void note_alive(uint32_t now_ms) {
   noinit_last_ms = now_ms;
 }
 
+uint32_t previous_life_ms() {
+  return noinit_magic == NOINIT_MAGIC ? noinit_last_ms : 0ul;
+}
+
 }  // namespace wdt

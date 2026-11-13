@@ -2065,3 +2065,88 @@ Cloudflare tunnel, toma's via loopback), session COMPLETED, miya +100/+100
 and toma +100/+100 exactly once, both pets leveled (miya level 3/210 XP,
 toma level 3/200 XP — from 0/0 after the demo reset). The full user-facing
 quiz flow is now proven with physical buttons on both boards.
+
+**Crash forensics (13 Nov, night — live capture):** with the resilient
+serial loggers running, board 1's crash was captured with full context:
+the board died in its ADVERTISING window immediately after a post-connect
+relay burst (HELLO->STATUS replied, then silence → 16 s → watchdog → USB
+glitch → reboot). No error print, no wedge print — a silent loop stall.
+The watchdog + auto-recovery worked as designed (the quiz session and
+toma's pad state survived the reboot; the pad re-armed from the FE's
+relay ✓). The stall follows the app's post-connect relay burst
+(SESSION_STATE + INTERACTION + TIME_ANCHOR + PARTNER_INFO + PET_STATE
+back-to-back) on the STRIPPED stacks — board 1 ran 2.7 h stable this
+morning with the full stack under the same relay pattern. Leading theory:
+marginal SPI signal integrity on the BLE-shield-direct-to-processor
+seating corrupts module FIFO state under the relay burst → a blocked
+module write/read spins the loop → WDT. Next diagnostic if pursued:
+instrument BlueNRG_SPI_Read/Write with hard timeouts in the vendored
+STBLE. The boards self-recover; demos are viable through the resets.
+
+## Crash forensics made real + XP banner — 14 November 2026 (night)
+
+**Bootloader wipe root-caused the dead forensics:** `arm-none-eabi-nm` on the
+sam_ba bootloader ELF shows it zeroes its own `.bss` from `_szero`..`_ebss`
+= `0x20000068`..`0x20001bbc` on EVERY reset. The stock TinyCircuits linker
+script has NO `.noinit` output section, so GNU ld orphan-placed the forensics
+variables right after `.data` (~`0x20000190`) — inside the bootloader's wipe
+range. That is why every watchdog boot printed "previous life 0 ms": the
+values were destroyed before `setup()` ran. The "verified" comment in
+`watchdog_app.cpp` was wrong (verified only that it compiled).
+
+**Fix (two parts):**
+1. Patched `tinyscreen_p` linker scripts pin a real `.noinit (NOLOAD)`
+   section at `0x20001C00` (above the bootloader wipe, below the heap/stack).
+   Copies preserved in-repo at `firmware/linker/tinyscreen_p/` with a README
+   (toolchain data dir is gitignored — the patch must be re-applied on a
+   fresh toolchain install).
+2. New `firmware/catch_me_app/crash_diag.{h,cpp}`: a 128-entry breadcrumb
+   ring (8 B/entry: delta-ms, id, a, b) in `.noinit`, written by every
+   instrumented site, dumped on the first boot after a watchdog reset
+   (moved BEFORE ble init so the new life's init traffic cannot overwrite
+   the previous life's tail).
+
+**Instrumented sites:** `hci_send_req` entry/answered/timeout (opcode),
+`free_event_list` (pool/rxq sizes), `HCI_Process` with pending events
+(queue depth), `HCI_Isr` drain-cap trips, `Hal_Write_Serial` module-busy
+retries, TDD phase transitions, phone connect/disconnect, `send_message`/
+`inject_message`, telemetry record + queue-full, module re-init (both
+phantom-link and wedge-recovery paths), 500 ms tick liveness with phase.
+Vendored STBLE patched in BOTH copies (repo `firmware/lib/STBLE` and the
+gitignored runtime `tools/arduino-cli/data/user/libraries/STBLE`).
+
+**Forensics PROVEN on hardware:** `CM_WDT_SELFTEST` build (build-property
+flag, board 1 only) froze on purpose → WDT reset → next boot printed a real
+breadcrumb tail of pre-freeze HCI traffic (`0xFD01`-family vendor commands,
+LE commands, write retries) across the reset. `previous_life_ms` now works.
+
+**Overnight crash evidence (phone=0, no app):** B2 crashed 4× (00:11, 00:47,
+01:26, 02:36) during plain TDD cycling — each freeze began in/just after a
+SCANNING window ("discovery started" was the last line), ~35-70 min apart.
+B1 ran 3.6 h+ clean on identical firmware. Two crash modes now known:
+the quiz-time post-relay-burst stall and this pure radio-path wedge.
+Static analysis found NO unbounded software loop: SPI transport is
+single-byte non-blocking, `DEFAULT_TIMEOUT` is 100 ms, event handlers are
+bounded, no HCI packet leak. The breadcrumb ring will name the exact stuck
+operation on the next crash.
+
+**XP visibility (wearable):** the quiz used to end silently (pad screen
+reverted to PET). New 8 s reward banner (`flash_reward`) overrides the UI on
+quiz completion ("QUIZ COMPLETE") and session completion ("QUEST COMPLETE"):
+"+100 points", "+100 XP", and the live server level ("LEVEL UP! -> n" when
+the pet sync raises it mid-banner). The raid fight and PIN screen keep
+display ownership (banner defers). Phone side already shows
+"Level N · M XP" (pet card) and "Quiz complete! +100 points & XP each".
+Builds: D1 54,360 B / D2 53,804 B (20%); both flashed (boot verified, TDD
+cycling, loggers reattached).
+
+**S21+ re-configured tunnel-native for the external-network demo:** app
+relaunched with `--es api_base https://catchme.12357895.xyz` + infra/.env
+Access creds; prefs now persist the tunnel URL (`shared_prefs/api.xml`
+verified), and the app is actively polling the API through the Cloudflare
+tunnel (GET /me, /discovery-profile, /discovery, /invitations — all 200).
+
+**Pending:** first real crash dump (B2 cadence suggests <1 h); quiz/explore
+E2E with only the S21+ (dual-app-instance idea: `adb install --user 10`
+same APK signed in as toma so one phone drives both sides honestly —
+not yet attempted); final demo-level reset before the showcase.

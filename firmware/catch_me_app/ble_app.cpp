@@ -1,4 +1,5 @@
 #include "ble_app.h"
+#include "crash_diag.h"
 #include "game_app.h"
 
 // TEMP DIAGNOSTIC: peripheral-only radio (no central role, no TDD cycling
@@ -449,6 +450,7 @@ void BleApp::note_connect(uint16_t handle, uint8_t role, const uint8_t* bdaddr) 
     conn_handle_ = handle;
     radio_state_ = RadioState::LINKED;
     state_started_ms_ = millis();
+    cdiag::bc(cdiag::B_PHONE_UP, role, handle);
     link_terminate_sent_ = false;  // fresh link: re-arm the drop timer
     SerialLog.println("ble: phone connected");
 #if CM_GAME_GATE
@@ -467,6 +469,7 @@ void BleApp::note_connect(uint16_t handle, uint8_t role, const uint8_t* bdaddr) 
 }
 
 void BleApp::note_disconnect(uint16_t handle, uint8_t reason) {
+  cdiag::bc(cdiag::B_DISC, (uint8_t)(handle & 0xFF), reason);
   SerialLog.print("ble: disconnected handle=");
   SerialLog.print(handle);
   SerialLog.print(" reason=0x");
@@ -496,16 +499,19 @@ void BleApp::enter_scanning() {
   radio_state_ = RadioState::SCANNING;
   state_started_ms_ = millis();
   discovery_running_ = 0;
+  cdiag::bc(cdiag::B_SCAN, 0, 0);
   SerialLog.println("ble: -> SCANNING");
 }
 
 void BleApp::enter_advertising() {
   radio_state_ = RadioState::ADVERTISING;
   state_started_ms_ = millis();
+  cdiag::bc(cdiag::B_ADV, 0, 0);
   SerialLog.println("ble: -> ADVERTISING");
 }
 
 void BleApp::inject_message(uint8_t type, const uint8_t* payload, uint16_t len) {
+  cdiag::bc(cdiag::B_MSG, type, len);
   if (type == MSG_SESSION_STATE) {
     apply_session_message(payload, len);
     return;
@@ -611,6 +617,7 @@ void BleApp::apply_session_message(const uint8_t* p, uint16_t len) {
 }
 
 bool BleApp::send_message(uint8_t type, const uint8_t* payload, uint16_t len) {
+  cdiag::bc(cdiag::B_SEND, type, len);
   if (!phone_connected_) return false;
   uint8_t frag_count = (uint8_t)((len + FRAME_PAYLOAD_MAX - 1) / FRAME_PAYLOAD_MAX);
   if (frag_count == 0) frag_count = 1;
@@ -647,6 +654,7 @@ bool BleApp::send_message(uint8_t type, const uint8_t* payload, uint16_t len) {
 // lives near the top with feed_fragment; see rx_msg_* above.
 
 void BleApp::module_reinit() {
+  cdiag::bc(cdiag::B_REINIT, 0, 0);
   // The module is gone (IRQ stuck): every radio state is void. End any
   // raid honestly — the fight is LOST, never fabricated as anything else,
   // and no outcome is relayed (the boards' phones only relay outcomes the
@@ -692,8 +700,16 @@ void BleApp::tick() {
   if (wedge_ms_start && now_ms - wedge_ms_start >= 2000) {
     SerialLog.println("ble: module wedged (IRQ stuck, no valid reads 2s); hard reset + re-init");
     wedge_ms_start = 0;
+    cdiag::bc(cdiag::B_REINIT, 1, 0);  // a=1: wedge-recovery path
     module_reinit();
     return;
+  }
+  { /* throttled liveness breadcrumb with the TDD phase (500 ms) */
+    static uint32_t last_bc_tick_ms = 0;
+    if (now_ms - last_bc_tick_ms >= 500) {
+      last_bc_tick_ms = now_ms;
+      cdiag::bc(cdiag::B_TICK, (uint8_t)radio_state_, 0);
+    }
   }
 #if CM_GAME_GATE
   gate_tick();
