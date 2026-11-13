@@ -83,3 +83,8 @@ tools/android-user-home/
 debug.keystore
 debug.keystore.lock
 *.keystore.lock
+
+# ---- catch-me: API session tokens (bench scripts; never publish) ----
+tools/.toma_token
+tools/.miya_token
+tools/.*_token

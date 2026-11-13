@@ -2150,3 +2150,44 @@ tunnel (GET /me, /discovery-profile, /discovery, /invitations — all 200).
 E2E with only the S21+ (dual-app-instance idea: `adb install --user 10`
 same APK signed in as toma so one phone drives both sides honestly —
 not yet attempted); final demo-level reset before the showcase.
+
+## One-phone quiz E2E through the tunnel + XP visibility proven — 14 Nov 04:00
+
+**S21+ drives miya (bound Wearable 2 by alias=2); toma driven via API.**
+A stale `active` explore session from 13 Nov 22:50 silently blocked ALL new
+session creation (409 `session_in_progress` — the phone's Quiz taps failed
+with a transient snackbar; DB confirmed). Cancelled it, then ran the full
+quiz flow through the Cloudflare tunnel:
+
+1. Session `91c7f7cd` (quiz, demo) created by toma via API; miya accepted
+   (phone app relays board 2).
+2. Server generated 2 questions per answerer, customized from the partner's
+   profile interests ("Which of these is Toma's/Miya's interest?" — tags
+   gaming/music, verified in `user_interests`).
+3. miya's answers pressed on the BOARD 2 PAD (serial `QANS 3`, mirrors the
+   physical A-D buttons) → phone relayed each to the server ("quiz answer
+   received idx=0/1 choice=3"); toma answered via authenticated API.
+4. Completion: `quest_awards` shows **+100 points +100 XP to BOTH users
+   exactly once**; both users now 310 XP / level 3 → 4.
+
+**XP visibility on every surface (the lecturer sees the impact):**
+- Wearable: `pet_core: evolved to stage 3` + `server sync xp=310 level=4`
+  (pet screen shows L4, adult sprite); the new reward banner fired on the
+  board ("ui: reward banner: QUEST COMPLETE" captured on serial — the
+  same flash_reward path renders "QUIZ COMPLETE" on the active→0 relay).
+- Phone pet card now LIVE-updates: root-caused it staying stale (pet mirror
+  fetched only at sign-in); `refreshPetAndLandmarks()` now runs in the
+  connected cycle, throttled to 10 s. Screenshot: "Reset · Spark (adult) —
+  Level 4 · 310 XP" minutes after the award, no restart.
+- Server: `/me` level/xp + transactions are the source of truth.
+
+**Forensics status:** both boards run the instrumented product firmware
+(53.8/54.4 KB). The first natural crash will dump the exact stuck operation
+via the noinit breadcrumb ring; loggers attached (B2 crashes every ~35-70
+min overnight with phone=0 during plain scan cycling).
+
+**Bench notes:** MSYS path conversion mangles leading-slash curl paths and
+adb shell paths (`MSYS2_ARG_CONV_EXCL="*"`, full script paths); gradle
+needs `GRADLE_USER_HOME=D:/catch_me/.gradle-user`. Bench token files
+(`tools/.toma_token`, `tools/.miya_token`) are now gitignored. Phone screen
+timeout temporarily 20 min for the E2E (was 10 min).

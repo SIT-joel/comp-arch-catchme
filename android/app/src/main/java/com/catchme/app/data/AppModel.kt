@@ -477,6 +477,15 @@ class AppModel(private val context: Context, baseUrl: String) {
                     sessionToken = token,
                     sessionId = session?.let { UUID.fromString(it.getString("session_id")) })
                 if (ble.state.value is BleLink.State.Connected) {
+                    // v2 XP visibility: the pet mirror (level/XP) must refresh
+                    // after quest awards, not only at sign-in — otherwise the
+                    // pet card and the wearable's level stay stale until the
+                    // app restarts. Throttled to one fetch per 10 s.
+                    val nowMs = System.currentTimeMillis()
+                    if (nowMs - lastPetRefreshMs >= 10_000) {
+                        lastPetRefreshMs = nowMs
+                        refreshPetAndLandmarks()
+                    }
                     sendSessionState(ds)
                     sendInteractionState(ds)
                     sendTimeAnchor()
@@ -1044,6 +1053,7 @@ class AppModel(private val context: Context, baseUrl: String) {
     }
 
     private var rxLoggedPet = 0
+    private var lastPetRefreshMs = 0L
 
     // ==================== Nearby discovery (docs/DISCOVERY_PLAN.md) ====================
     //
