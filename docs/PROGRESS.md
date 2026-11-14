@@ -2231,3 +2231,31 @@ silent 16 s hang + reboot. D1 54,504 B / D2 53,948 B.
 the underlying trigger (module RF state wedging under phone-app scan-burst
 desense at close range) is environmental — demos keep boards and phones
 physically separated during radio-heavy phases.
+
+## Phone scan-burst pacing — 14 Nov 11:00
+
+**Problem:** the phone's radio jammed the board's 2 s evidence window every
+TDD cycle. Two layers: (1) the app-level scan ran at BALANCED duty whenever
+the link was down; (2) the post-TDD reconnect used a controller-level
+`autoConnect=true` client that re-scans IMMEDIATELY (~1 s reconnect observed
+live) — pacing the app-side reconnect was defeated by the controller doing
+its own scan. Proven impact: board 2's advert reception froze (adv_rx stuck,
+peers stuck) whenever the phone was linked, recovering only when the app was
+killed.
+
+**Fix (BleLink.kt):** on any board-initiated disconnect, `disconnect()` +
+`close()` the GATT client right away (kills the controller's instant
+auto-reconnect), then schedule the reconnect 2.3 s later — radio-silent
+through the board's 2 s evidence window, landing the connect attempt inside
+its 1.5 s advertising window. The paced runnable guards against a fresh
+user-initiated scan; `connect()`/`close()` cancel the pending callback.
+Reconnect budget resets on every successful link, so normal TDD cycling
+never exhausts it; a missed ADV window costs one extra cycle (~7-8 s total
+reconnect latency, well inside the board's 10 s cycle).
+
+**Verified live (B2, phone linked across cycles):** disconnect → 2 s silent
+gap with adv_rx/peers CLIMBING (21259→21429, peers 954→960) → reconnect in
+the ADV window → full 5.9 s LINKED windows intact. The board's peer-evidence
+path now works with the phone adjacent — the proximity/quest evidence
+requirement holds in the worst-case bench layout. Initial user-initiated
+scans stay BALANCED (short, needed); `spit` SPI-bound counter stayed low.

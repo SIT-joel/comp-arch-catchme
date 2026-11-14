@@ -69,6 +69,10 @@ class BleLink(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun connect(ownAlias: Int) {
+        // A fresh user-initiated connect supersedes any paced post-TDD
+        // reconnect: cancel it FIRST so a cancelled scan session can never
+        // race a new one (the runnable also self-guards on Scanning).
+        cancelReconnect()
         if (!ensureAdapter()) {
             _state.value = State.Failed("Bluetooth unavailable or not enabled")
             return
@@ -291,6 +295,37 @@ class BleLink(private val context: Context) {
         return gatt != null
     }
 
+    // --- post-TDD reconnect pacing (RF-desense mitigation, 14 Nov) ---
+    //
+    // The board drops the phone EVERY TDD cycle and then scans its peer for
+    // 2 s (CM_TDD_SCAN_MS) — the evidence window the phone's own radio jams
+    // at close range (proven live: the board's advert reception froze while
+    // the phone was scanning and recovered instantly when the app stopped).
+    // Reconnecting IMMEDIATELY means the controller-level connect scan runs
+    // straight through that window. So: stay radio-silent for the board's
+    // scan window, then reconnect — landing the connect attempt inside the
+    // board's 1.5 s advertising window, where it completes in <1 s and the
+    // scan stops. Worst case one window is missed (~2 s extra latency).
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingReconnect: Runnable? = null
+
+    private fun scheduleReconnect() {
+        pendingReconnect?.let { mainHandler.removeCallbacks(it) }
+        val r = Runnable {
+            pendingReconnect = null
+            // A fresh app-level scan (user tap / supervisor) owns the link.
+            if (_state.value is State.Scanning) return@Runnable
+            if (!reconnectControllerLevel()) _state.value = State.Idle
+        }
+        pendingReconnect = r
+        mainHandler.postDelayed(r, RECONNECT_DELAY_MS)
+    }
+
+    private fun cancelReconnect() {
+        pendingReconnect?.let { mainHandler.removeCallbacks(it) }
+        pendingReconnect = null
+    }
+
     private val gattCallback: BluetoothGattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -310,14 +345,22 @@ class BleLink(private val context: Context) {
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.w(TAG, "GATT disconnected (status=$status)")
-                    // Reconnect at the CONTROLLER level: autoConnect=true makes
-                    // the chip wait for the board's advertisement itself — no
-                    // app-level scanner registration, which is exactly what the
-                    // S21+ (One UI 6.1) refuses after one scan->GATT cycle
-                    // (SCAN_FAILED_REGISTRATION_FAILED). The board's static
-                    // public address makes autoConnect safe. Supervisor stays
-                    // as fallback if the controller connect cannot start.
-                    if (!reconnectControllerLevel()) _state.value = State.Idle
+                    // KILL the controller-level auto-reconnect NOW: an
+                    // autoConnect=true client re-scans immediately (~1 s
+                    // reconnect observed live), which defeats the pacing and
+                    // keeps the phone radio hot straight through the board's
+                    // 2 s evidence window. close() releases the client; the
+                    // PACED reconnect (scheduleReconnect) opens a fresh one
+                    // after the board's scan window, landing inside its
+                    // 1.5 s advertising window. autoConnect=true on the new
+                    // client stays — it only starts scanning once created,
+                    // and if the window is missed it waits at low duty for
+                    // the next one. The board's static public address makes
+                    // autoConnect safe; the supervisor remains the fallback.
+                    runCatching { g.disconnect() }
+                    runCatching { g.close() }
+                    if (g === gatt) gatt = null
+                    scheduleReconnect()
                 }
             }
         }
@@ -390,6 +433,7 @@ class BleLink(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun close() {
+        cancelReconnect()
         adapter?.bluetoothLeScanner?.stopScan(scanCallback)
         gatt?.disconnect()
         gatt?.close()
@@ -399,5 +443,10 @@ class BleLink(private val context: Context) {
 
     companion object {
         private const val TAG = "BleLink"
+
+        /** Radio-silent period after a board-initiated disconnect: covers the
+         * board's 2 s evidence scan window (CM_TDD_SCAN_MS) plus margin; the
+         * reconnect then lands inside the 1.5 s advertising window. */
+        private const val RECONNECT_DELAY_MS = 2300L
     }
 }
