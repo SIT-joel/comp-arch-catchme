@@ -162,14 +162,17 @@ class AppModel(private val context: Context, baseUrl: String) {
                         return@runCatching api.me()
                     } catch (e: Exception) {
                         last = e
+                        android.util.Log.w("AppModel", "restore /me attempt $attempt failed: ${e.message}")
                         kotlinx.coroutines.delay(1500L * attempt)
                     }
                 }
                 throw (last ?: IllegalStateException("restore failed"))
             }.getOrElse {
+                android.util.Log.w("AppModel", "restore gave up after retries; falling back to sign-in")
                 api.token = null
                 return@launch
             }
+            android.util.Log.i("AppModel", "session restored (token validated)")
             runCatching {
                 val device = me.optJSONObject("device")
                 _ui.value = _ui.value.copy(
