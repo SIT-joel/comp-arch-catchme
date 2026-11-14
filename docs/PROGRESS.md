@@ -2434,3 +2434,52 @@ landmark / in the geofence) — single-phone quests (together PIN needs both
 wearables too; quiz needs both answers) are likewise two-party. The boards
 run the final firmware (deaf-module recovery + all raid/screen fixes);
 loggers attached for the overnight soak.
+
+## PRACTICE RAID (location-free) — 14 Nov 18:00
+
+**User request: a raid fight with NO location dependency for the demo.**
+Implemented as a complete alternative trigger path:
+
+1. **Phone button "Practice fight"** (in the Quests section, always present):
+   sends MSG_RAID_START payload [2, demo=1] to this phone's board — no
+   session, no landmark gate, no server. The send RETRIES every connected
+   cycle for 30 s (the TDD disconnects eat single-shot sends).
+2. **The board arms as the raid client** and its peer advertisement gains a
+   **raid flag byte** (CM_PEER_ADV_LEN 6 -> 7: flag 1 = normal HP, 2 = demo
+   HP 20). The client advertises continuously while waiting for a host.
+3. **The host board auto-arms from its scan**: note_advertisement sees the
+   peer's raid flag and calls raid_start (device 1 = the host role; the
+   client role belongs to whoever tapped the button). The host connects to
+   the flag-advertising client and the fight runs — pure board-to-board,
+   the result shows on the boards only.
+4. **The arm signal**: the board drops the phone the moment it accepts a
+   practice raid-start; BleLink detects the disconnect within 2 s of a
+   successful send and holds reconnects for the fight (60 s) instead of
+   pacing them — without this the paced reconnect raced the raid setup.
+5. **Phones respect the raid flag**: a phone whose own board advertises
+   with the raid flag stops connecting and holds reconnects — otherwise
+   the phone's reconnects starved the other board's scan windows.
+6. **Event-deaf recovery (third failure mode)**: the module can deliver NO
+   HCI events (every phone write silently lost) while connections and
+   scanning stay alive — signature: phone linked AND the HCI read counter
+   frozen 15 s -> module re-init, once per episode. Board 2 hit this
+   repeatedly tonight (the practice raid-starts never arrived).
+7. **Deaf detector exempted during raids**: the raid client's adv_rx freeze
+   is by design; the advert-deaf detector now skips while raid_mode_.
+8. **Boss HP follows the raid-start's demo byte** (raid_demo_hp_): the
+   session raid relays the session's demo flag; the practice raid always
+   runs demo HP (20) for a quick, winnable fight.
+
+**Verified live**: the practice button armed board 2 (the client) with the
+flag=2 payload on air ("raid: adv built len=14 payload: FF 30 00 C5 02 07
+00 00 00 02"); the fight between the boards started from the phone-trigger
+path earlier (14:22/14:29 "raid: FIGHT!" on both boards via the session
+path). The remaining gap: board 1's auto-arm on catching the flag=2 advert
+has not yet been observed live (the phone instances kept freezing/churning
+during the tests — Samsung Freecess freezes adb-driven apps without real
+user interaction; the demo uses real touches).
+
+**Known issue**: the S21+'s session restore intermittently shows the
+sign-in screen despite the token validating (the restore succeeded per the
+log while the UI stayed on sign-in). Manual sign-in works every time; the
+demo starts with a manual sign-in anyway.

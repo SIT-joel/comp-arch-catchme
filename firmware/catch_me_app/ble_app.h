@@ -173,7 +173,11 @@ class BleApp {
   // direct connection, then resume. Triggered by the phone relay (raid
   // session active) or the bench serial command. existing_peer_handle: the
   // host's already-live link (relay-miss tolerance entry on the client).
-  void raid_start(uint16_t existing_peer_handle = 0);
+  void raid_start(bool demo_hp, uint16_t existing_peer_handle = 0);
+  // Boss HP selection for the live fight (the raid-start's demo byte; the
+  // practice raid always passes true). Also rides the peer-advert raid flag
+  // (1 normal / 2 demo) so the auto-armed host matches the client.
+  bool raid_demo_hp() const { return raid_demo_hp_; }
   bool raid_active() const { return raid_mode_; }
   void raid_note_connected(uint16_t handle, uint8_t role);
   void raid_note_disc_resp(uint16_t attr_handle);
@@ -242,6 +246,7 @@ class BleApp {
   RadioState radio_state_ = RadioState::ADVERTISING;
   // v2 raid state (runtime-gated; zero effect until raid_start()).
   bool raid_mode_ = false;
+  bool raid_demo_hp_ = false;  // raid-start's demo byte: 20 HP vs 60 HP boss
   bool raid_adv_started_ = false;
   uint8_t raid_teardown_stage_ = 0;
   bool link_terminate_sent_ = false;

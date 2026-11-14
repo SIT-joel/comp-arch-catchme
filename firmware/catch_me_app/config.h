@@ -22,7 +22,7 @@
 // bytes: [0]=0xC5 magic, [1]=DEVICE_ID, [2..3]=heartbeat counter LE,
 // [4..5]=session token hash LE (fnv1a-16 of the active token; 0 when none).
 #define CM_PEER_MAGIC 0xC5
-#define CM_PEER_ADV_LEN 6
+#define CM_PEER_ADV_LEN 7  // [magic][device][counter 2B][token 2B][raid flag]
 
 // Nearby discovery advertisement (docs/DISCOVERY_PLAN.md): separate,
 // versioned message — NOT session evidence. Bytes: [0]=0xC6 magic,

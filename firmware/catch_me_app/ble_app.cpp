@@ -99,13 +99,19 @@ uint16_t fnv16(const uint8_t* data, uint16_t len) {
 
 uint16_t fnv16_str(const char* s) { return fnv16((const uint8_t*)s, (uint16_t)strlen(s)); }
 
-void build_peer_adv(uint8_t* out, uint8_t device_id, uint16_t counter, uint16_t token_hash) {
+void build_peer_adv(uint8_t* out, uint8_t device_id, uint16_t counter, uint16_t token_hash,
+                    uint8_t raid_flag) {
   out[0] = CM_PEER_MAGIC;
   out[1] = device_id;
   out[2] = (uint8_t)(counter & 0xFF);
   out[3] = (uint8_t)(counter >> 8);
   out[4] = (uint8_t)(token_hash & 0xFF);
   out[5] = (uint8_t)(token_hash >> 8);
+  // Raid flag (byte 6): 1 while THIS board is in raid mode and advertising
+  // for a host. The host board scans for this flag and arms itself
+  // automatically — that is the whole practice-raid trigger (no session,
+  // no location, no server; 14 Nov).
+  out[6] = raid_flag;
 }
 
 // Discovery advertisement: [0xC6][version][token LE16]. No PII; opaque id
@@ -208,8 +214,26 @@ void BleApp::rotate_advertising_payload() {
     build_discovery_adv(advData + i, discovery_token_);
     i += CM_DISC_ADV_LEN;
   } else {
-    build_peer_adv(advData + i, DEVICE_ID, heartbeat_counter_, session_token_hash_);
+    build_peer_adv(advData + i, DEVICE_ID, heartbeat_counter_, session_token_hash_,
+                   (uint8_t)(raid_mode_ ? (raid_demo_hp_ ? 2 : 1) : 0));
     i += CM_PEER_ADV_LEN;
+  }
+  if (raid_mode_) {
+    // Triage (14 Nov): print the built peer payload once per second so the
+    // raid flag's on-air bytes are verifiable from the serial log.
+    static uint32_t last_flag_dbg = 0;
+    if (millis() - last_flag_dbg >= 1000) {
+      last_flag_dbg = millis();
+      SerialLog.print("raid: adv built len=");
+      SerialLog.print(i);
+      SerialLog.print(" payload:");
+      for (uint8_t k = 4; k < i; ++k) {
+        SerialLog.print(" ");
+        if (advData[k] < 0x10) SerialLog.print("0");
+        SerialLog.print(advData[k], HEX);
+      }
+      SerialLog.println();
+    }
   }
   tBleStatus ret = aci_gap_update_adv_data(i, advData);
   if (ret != BLE_STATUS_SUCCESS) {
@@ -276,6 +300,33 @@ void BleApp::note_advertisement(uint8_t* data, uint8_t len, int8_t rssi) {
         uint8_t device = data[i + 5];
         uint16_t counter = data[i + 6] | ((uint16_t)data[i + 7] << 8);
         uint16_t token_hash = data[i + 8] | ((uint16_t)data[i + 9] << 8);
+        // Practice-raid trigger (14 Nov): the peer is in raid mode and
+        // advertising for a host. The HOST board arms itself automatically
+        // and connects — no session, no location gate, no server. Only the
+        // host (device 1) auto-arms; the client role belongs to whoever's
+        // phone tapped "Practice fight".
+        uint8_t raid_flag = data[i + 10];
+        if (raid_flag && device != DEVICE_ID && DEVICE_ID == 1 &&
+            !raid_mode_ && !g_game.active()) {
+          SerialLog.println("raid: peer advertising for a host; arming (practice)");
+          raid_start(raid_flag == 2);  // flag 2 = demo HP boss
+        } else if (device != DEVICE_ID && device >= 1 && device <= 2) {
+          // Triage (14 Nov): dump the raw peer-advert bytes — the practice
+          // auto-arm reads data[i+10] as 0; see exactly what is on air.
+          static uint32_t last_raw_dump = 0;
+          if (millis() - last_raw_dump >= 3000) {
+            last_raw_dump = millis();
+            SerialLog.print("raid: raw peer adv len=");
+            SerialLog.print(field_len);
+            SerialLog.print(" bytes:");
+            for (uint8_t k = 0; k < field_len + 1 && k < 16; ++k) {
+              SerialLog.print(" ");
+              if (data[i + k] < 0x10) SerialLog.print("0");
+              SerialLog.print(data[i + k], HEX);
+            }
+            SerialLog.println();
+          }
+        }
         if (device != DEVICE_ID && device >= 1 && device <= 2) {
           uint32_t now = millis();
           // Dedupe: the same counter is not new evidence (docs/INTERFACES.md).
@@ -439,7 +490,7 @@ void BleApp::note_connect(uint16_t handle, uint8_t role, const uint8_t* bdaddr) 
   // relay-miss tolerance: the host connecting IS the raid trigger for us.
   static const uint8_t kRaidPeerAddr[6] = {0x12, 0x34, 0x00, 0xE1, 0x80, 0x01};
   if (role == 1 && bdaddr && memcmp(bdaddr, kRaidPeerAddr, 6) == 0) {
-    if (!raid_mode_) raid_start(handle);
+    if (!raid_mode_) raid_start(session_.demo, handle);
     else raid_conn_handle_ = handle;
     raid_note_connected(handle, role);
     return;
@@ -723,7 +774,9 @@ void BleApp::tick() {
     static uint32_t deaf_check_adv_rx = 0;
     static uint8_t deaf_checks = 0;
     static bool deaf_reinit_done = false;
-    if (now_ms - last_deaf_check_ms >= 10000UL) {
+    if (now_ms - last_deaf_check_ms >= 10000UL && !raid_mode_) {
+      // raid_mode_ exempt: the raid CLIENT intentionally stops scanning
+      // (adv_rx frozen while advertising for the host — not a deaf module).
       if (last_deaf_check_ms != 0) {
         if (adverts_rx_ != deaf_check_adv_rx) {
           deaf_check_adv_rx = adverts_rx_;
@@ -741,6 +794,34 @@ void BleApp::tick() {
         }
       }
       last_deaf_check_ms = now_ms;
+    }
+  }
+  { /* Event-deaf recovery (14 Nov, third failure mode): the module accepts
+     * the phone's connection and even scans, but delivers NO HCI events —
+     * every GATT write from the phone is silently lost (board 2: the
+     * practice raid-start never arrived while adverts kept flowing). A
+     * linked phone ALWAYS generates events (its writes arrive ~1-2 s apart),
+     * so: phone connected AND the HCI read counter frozen for 15 s = the
+     * event path is dead. Hard-reset once per episode. */
+    static uint32_t evt_check_ms = 0;
+    static uint32_t evt_check_reads = 0;
+    static bool evt_reinit_done = false;
+    if (now_ms - evt_check_ms >= 15000UL) {
+      if (evt_check_ms != 0 && phone_connected_) {
+        if (hci_irq_drain_reads == evt_check_reads) {
+          if (!evt_reinit_done) {
+            SerialLog.println("ble: module event-deaf (phone linked, no HCI reads 15s); re-init");
+            evt_reinit_done = true;
+            cdiag::bc(cdiag::B_REINIT, 3, 0);  // a=3: event-deaf path
+            module_reinit();
+            return;
+          }
+        } else {
+          evt_reinit_done = false;
+        }
+      }
+      evt_check_reads = hci_irq_drain_reads;
+      evt_check_ms = now_ms;
     }
   }
 #if CM_GAME_GATE
@@ -1147,9 +1228,10 @@ void BleApp::gate_note_disconnected() {
 // normal fragment path, and the client's inputs arrive as MSG_GAME_INPUT.
 // No notifications/CCCDs needed.
 
-void BleApp::raid_start(uint16_t existing_peer_handle) {
+void BleApp::raid_start(bool demo_hp, uint16_t existing_peer_handle) {
   if (raid_mode_) return;
   raid_mode_ = true;
+  raid_demo_hp_ = demo_hp;  // boss HP + the peer-advert raid flag value
   raid_started_ms_ = millis();
   raid_retry_ms_ = 0;
   // Full reset: a previous fight may have ended in REPORT/DONE (aborted or

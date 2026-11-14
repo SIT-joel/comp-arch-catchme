@@ -239,6 +239,25 @@ class BleLink(private val context: Context) {
                 }
             }
             if (alias != wantedAlias) return
+            // Practice/session raid respect: my board advertises with the
+            // raid flag while it is fighting (the fight owns the radio) —
+            // the phone must NOT connect and must hold its reconnects, or
+            // the link starves the board's raid advertising and the host
+            // never finds it (live 14 Nov: the boards' scan windows were
+            // consumed by the phone's reconnects).
+            val mfr = record?.getManufacturerSpecificData(0x0030)
+            if (mfr != null && mfr.size >= 7 && (mfr[0].toInt() and 0xFF) == 0xC5 &&
+                (mfr[1].toInt() and 0xFF) == wantedAlias && (mfr[6].toInt() and 0xFF) != 0) {
+                val now = System.currentTimeMillis()
+                if (now > reconnectPausedUntil) {
+                    Log.i(TAG, "my board is raiding; holding phone off for the fight")
+                }
+                if (now + 60_000L > reconnectPausedUntil) {
+                    reconnectPausedUntil = now + 60_000L
+                    cancelReconnect()
+                }
+                return
+            }
             val device: BluetoothDevice = result.device
             Log.i(TAG, "scan hit alias=$alias addr=${device.address}")
             lastDevice = device
@@ -309,6 +328,14 @@ class BleLink(private val context: Context) {
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingReconnect: Runnable? = null
     @Volatile private var reconnectPausedUntil = 0L
+    @Volatile private var lastPracticeSendMs = 0L
+
+    /** Stamp a successful practice raid-start send: the board responds by
+     *  dropping the phone (the fight armed) — the next disconnect pauses
+     *  reconnects for the fight window instead of pacing them. */
+    fun notifyPracticeSend() {
+        lastPracticeSendMs = System.currentTimeMillis()
+    }
 
     private fun scheduleReconnect() {
         // v2 raid: while the fight owns the radio, the board drops the phone
@@ -365,22 +392,25 @@ class BleLink(private val context: Context) {
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.w(TAG, "GATT disconnected (status=$status)")
-                    // KILL the controller-level auto-reconnect NOW: an
-                    // autoConnect=true client re-scans immediately (~1 s
-                    // reconnect observed live), which defeats the pacing and
-                    // keeps the phone radio hot straight through the board's
-                    // 2 s evidence window. close() releases the client; the
-                    // PACED reconnect (scheduleReconnect) opens a fresh one
-                    // after the board's scan window, landing inside its
-                    // 1.5 s advertising window. autoConnect=true on the new
-                    // client stays — it only starts scanning once created,
-                    // and if the window is missed it waits at low duty for
-                    // the next one. The board's static public address makes
-                    // autoConnect safe; the supervisor remains the fallback.
+                    // Practice-raid arm signal: the board drops the phone the
+                    // moment it accepts a practice raid-start — a disconnect
+                    // right after a successful send means THE FIGHT ARMED.
+                    // Hold reconnects for the fight (60 s) before pacing;
+                    // without this the paced reconnect raced the raid setup
+                    // (create_connection-rejected loops, live 14 Nov).
+                    val justArmed =
+                        System.currentTimeMillis() - lastPracticeSendMs < 2000L
                     runCatching { g.disconnect() }
                     runCatching { g.close() }
                     if (g === gatt) gatt = null
-                    scheduleReconnect()
+                    if (justArmed) {
+                        reconnectPausedUntil =
+                            System.currentTimeMillis() + 60_000L
+                        cancelReconnect()
+                        Log.i(TAG, "practice raid armed; radio to the fight")
+                    } else {
+                        scheduleReconnect()
+                    }
                 }
             }
         }

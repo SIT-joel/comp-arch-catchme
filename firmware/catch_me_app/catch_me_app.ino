@@ -334,7 +334,7 @@ void loop() {
       line_buf[line_len] = 0;
       if (line_len == 4 && strncmp(line_buf, "RAID", 4) == 0 && !g_game.active() &&
           !g_ble.raid_active()) {
-        g_ble.raid_start();
+        g_ble.raid_start(true);  // bench trigger: demo HP (20) for quick fights
       } else if (line_len == 6 && strncmp(line_buf, "QANS ", 5) == 0 &&
                  line_buf[5] >= '0' && line_buf[5] <= '3') {
         const bool ok = g_ui.bench_quiz_answer((uint8_t)(line_buf[5] - '0'));
@@ -441,9 +441,15 @@ void loop() {
         }
         break;
       case MSG_RAID_START:
-        if (len >= 2 && payload[0] == 1) {
-          SerialLog.println("raid: start requested by the phone");
-          g_ble.raid_start();
+        // payload[0]: 1 = session raid (the gate verified, server-verified
+        // outcome); 2 = PRACTICE raid (no session/location/server — the
+        // boards fight, the result shows on the boards only). Both arm the
+        // same raid mode; the practice client advertises with the raid flag
+        // so the host board auto-arms (see note_advertisement).
+        if (len >= 2 && (payload[0] == 1 || payload[0] == 2)) {
+          SerialLog.println(payload[0] == 2 ? "raid: PRACTICE start requested by the phone"
+                                            : "raid: start requested by the phone");
+          g_ble.raid_start(payload[1] != 0);
         }
         break;
       case MSG_GAME_STATE:
