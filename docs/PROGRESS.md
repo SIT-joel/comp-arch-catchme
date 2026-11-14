@@ -2310,3 +2310,52 @@ in the SAMD core's USB CDC OUT-endpoint handling (DoubleBufferedEPOutHandler
 notify/release race — the same family as the display SPI hazard); a deep
 core fix is pending. Workaround: flash -> submit within the window; the
 DEMO uses physical buttons (proven paths), not serial.
+
+## Raid E2E attempt + raid fixes + web service + demo reset — 14 Nov 14:00
+
+**Raid session ed647901 (Clock Tower Plaza, demo) created + activated with
+both phones.** Both boards entered raid mode from the phones' MSG_RAID_START
+relay (verified: "raid: mode ON (TDD suspended)" on B1, "raid: start
+requested by the phone" on B2 — the session-driven raid arming works).
+The board-to-board fight did NOT establish tonight; two product defects
+found and FIXED:
+
+1. **The phone's paced reconnect raced the board's staged raid teardown** —
+   the phone re-established its link while the host board was trying
+   create_connection, looping create_connection-rejected forever.
+   FIX: `BleLink.pauseReconnects()` called by AppModel when the raid relay
+   fires (drops the link + holds all reconnects for 4 min); the supervisor's
+   existing raidFightUntil guard covers the app-level path.
+2. **The raid CLIENT had no timeout** — when the host exits after its 60 s
+   connect timeout, the client waited in raid mode FOREVER (radio frozen,
+   no TDD rotation, no phone relink — board 2 hung 10+ minutes, adv_rx
+   frozen). FIX: client-side 90 s timeout in raid_tick exits raid mode
+   honestly; the phones re-relay raid-start on the next relink and the
+   gate retries. Both boards flashed; post-flash TDD verified clean.
+
+**Blocked on hardware presence:** the full fight -> outcome -> award needs
+toma's phone (S24 FE) UNLOCKED — it re-locked (password) mid-test and adb
+cannot bypass. The demo script for the raid: unlock the FE, keep both apps
+foregrounded, create the raid at the landmark, play the fight with the
+boards' buttons (LL/LR move, UR fire).
+
+**Web dashboard service was NOT running** (compose defines it; container
+never started). `docker compose up -d web` -> infra-web-1 Up, local :8080
+returns 200. The token-managed tunnel points only at the API (:8000); the
+dashboard is reachable on the LAN at http://192.168.1.100:8080 (or add a
+second public-hostname ingress in the Cloudflare Zero Trust dashboard for
+host.docker.internal:8080 if a public URL is wanted).
+
+**Reward shop verified via API**: GET /rewards (3 badges), POST
+/purchases with Idempotency-Key (transactional, honest 409 already_owned
+for a repeat purchase — badge re-ownable after the demo reset), GET
+/transactions 200.
+
+**DEMO STATE RESET (final)**: both users lifetime_xp=0 / points_balance=0,
+pets cleared (the wearables' fresh RAM pets re-sync defaults Sweep/Pixel on
+the next link; pet cards show Level 1 via the live mirror), owned_rewards
+cleared (badges purchasable during the demo). Session history KEPT (the
+lecturer can browse past sessions in the dashboard).
+
+**Overnight soak**: loggers reattached on both boards; the raid client
+timeout + phone raid pause need a live retry when the FE is unlocked.

@@ -308,17 +308,36 @@ class BleLink(private val context: Context) {
     // scan stops. Worst case one window is missed (~2 s extra latency).
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingReconnect: Runnable? = null
+    @Volatile private var reconnectPausedUntil = 0L
 
     private fun scheduleReconnect() {
+        // v2 raid: while the fight owns the radio, the board drops the phone
+        // deliberately — reconnecting during the fight races the board's
+        // staged teardown (create_connection rejected loops observed live
+        // 14 Nov) and starves the board-to-board link. The supervisor also
+        // pauses; this covers the paced path inside BleLink.
+        if (System.currentTimeMillis() < reconnectPausedUntil) return
         pendingReconnect?.let { mainHandler.removeCallbacks(it) }
         val r = Runnable {
             pendingReconnect = null
+            if (System.currentTimeMillis() < reconnectPausedUntil) return@Runnable
             // A fresh app-level scan (user tap / supervisor) owns the link.
             if (_state.value is State.Scanning) return@Runnable
             if (!reconnectControllerLevel()) _state.value = State.Idle
         }
         pendingReconnect = r
         mainHandler.postDelayed(r, RECONNECT_DELAY_MS)
+    }
+
+    /** Drop the current link and hold all reconnects for the given duration
+     * (the raid fight owns the radio; the board relinks the phone after). */
+    fun pauseReconnects(durationMs: Long) {
+        reconnectPausedUntil = System.currentTimeMillis() + durationMs
+        cancelReconnect()
+        gatt?.disconnect()
+        gatt?.close()
+        gatt = null
+        _state.value = State.Idle
     }
 
     private fun cancelReconnect() {
