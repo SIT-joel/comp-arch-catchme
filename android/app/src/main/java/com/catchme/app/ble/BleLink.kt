@@ -329,15 +329,16 @@ class BleLink(private val context: Context) {
         mainHandler.postDelayed(r, RECONNECT_DELAY_MS)
     }
 
-    /** Drop the current link and hold all reconnects for the given duration
-     * (the raid fight owns the radio; the board relinks the phone after). */
+    /** Hold all reconnects for the given duration (the raid fight owns the
+     * radio; the board relinks the phone after). The CURRENT link is kept:
+     * the raid-start relay retries every connected cycle and the board's own
+     * raid_start terminates the phone link when the fight arms — dropping
+     * the link here would kill the retry loop before the board ever arms
+     * (observed live 14 Nov: one raid-start send landed in a disconnected
+     * TDD window, the pause closed the link, and the raid never armed). */
     fun pauseReconnects(durationMs: Long) {
         reconnectPausedUntil = System.currentTimeMillis() + durationMs
         cancelReconnect()
-        gatt?.disconnect()
-        gatt?.close()
-        gatt = null
-        _state.value = State.Idle
     }
 
     private fun cancelReconnect() {

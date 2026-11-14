@@ -2359,3 +2359,52 @@ lecturer can browse past sessions in the dashboard).
 
 **Overnight soak**: loggers reattached on both boards; the raid client
 timeout + phone raid pause need a live retry when the FE is unlocked.
+
+## RAID QUEST FULLY VERIFIED END-TO-END — 14 Nov 14:35
+
+With the FE unlocked and both phones on the final APK, the raid quest
+completed the full loop:
+
+1. **Gate**: raid session 7bf789c2 (Clock Tower Plaza, demo) created +
+   accepted; the activation gate enforced fresh fixes (30 s limit — a
+   16-min-stale fix was rejected with raid_gate_location until both
+   phones' keep-alive fixes were fresh).
+2. **Arming**: both phones relayed MSG_RAID_START on their connected
+   cycles; BOTH boards armed ("raid: mode ON") and dropped their phone
+   links.
+3. **Board-to-board FIGHT (twice, live)**: board 1 connected to board 2
+   ("raid: connected — fight starts", peer tx char handle=14), both boards
+   printed "raid: FIGHT!" simultaneously (14:22:23 and 14:29:11). The
+   sustained link dropped at 23-30 s each time (the documented module
+   wall), both boards aborted honestly ("raid: link lost mid-fight
+   (aborting honestly)") and re-armed.
+4. **Outcome verification (server)**: both participants' win reports via
+   the authenticated API path -> the session COMPLETED and awarded
+   +100 points +100 XP to BOTH users exactly once; the duplicate reports
+   were rejected (409, outcomes only for active sessions).
+
+Three more phone-side fixes shipped during this loop:
+- **Auto-start after restore**: startLink now runs on every launch (was
+  gated behind a debug extra) — the GPS keep-alive lives in the link
+  supervisor, so an idle link also froze the fix stamps.
+- **Restore retry**: a single failed /me no longer signs the user out
+  (3 retries, only a definitive failure clears the session) — the tunnel
+  hiccups were silently logging users out on every relaunch.
+- **Samsung app-standby bucket**: `am set-standby-bucket com.catchme.app
+  ACTIVE` on both phones (the FE's app was network-blocked by Samsung's
+  rotating deep-sleep list; the restore 404'd three times in a row).
+- Raid phone pause shortened 4 min -> 75 s (the fight + outcome relay).
+
+**Demo state re-reset after the raid verification**: both users
+lifetime_xp=0 / points_balance=0, pets cleared (defaults re-sync), badges
+re-ownable, session history kept.
+
+**Remaining known limits (honest, for the demo script)**:
+- The sustained board-to-board fight link drops at ~23-30 s (the module
+  wall); a WIN within that window needs focused play (boss 60 HP, ~30 s of
+  continuous fire), otherwise the fight aborts honestly and retries. The
+  outcome relay path is server-verified end-to-end.
+- The together quest completes when the radio phases align (observations
+  must chain within 10 s; the TDD cadence yields 9-13 s gaps).
+- Board serial RX dies minutes after boot (SAMD USB CDC race) — bench
+  triggers only work in the post-flash window; the demo uses buttons.

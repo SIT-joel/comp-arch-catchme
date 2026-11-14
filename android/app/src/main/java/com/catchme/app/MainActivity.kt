@@ -69,11 +69,13 @@ class MainActivity : ComponentActivity() {
         model.api.accessId = extraId ?: apiPrefs.getString("cf_id", null) ?: BuildConfig.CF_ACCESS_ID
         model.api.accessSecret = extraSecret ?: apiPrefs.getString("cf_secret", null) ?: BuildConfig.CF_ACCESS_SECRET
         requestBlePermissions()
-        // Debug automation: `am start ... --ez autoconnect true` restores the
-        // session and starts the wearable link without any on-screen taps.
-        val autoconnect = intent.getBooleanExtra("autoconnect", false)
+        // Auto-start the wearable link after every launch (14 Nov): the app
+        // restores the session and connects without on-screen taps — the GPS
+        // keep-alive lives in the link supervisor, so an idle link also froze
+        // the quest fix stamps. startLink no-ops when no session was
+        // restored (deviceAlias absent), so the sign-in screen is unaffected.
         model.restoreSession {
-            if (autoconnect) model.startLink()
+            model.startLink()
         }
         setContent {
             MaterialTheme {
