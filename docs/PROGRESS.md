@@ -2408,3 +2408,29 @@ re-ownable, session history kept.
   must chain within 10 s; the TDD cadence yields 9-13 s gaps).
 - Board serial RX dies minutes after boot (SAMD USB CDC race) — bench
   triggers only work in the post-flash window; the demo uses buttons.
+
+## Raid screen UX fixes + board/S21+ station arrangement — 14 Nov 15:00
+
+**User reports fixed (both boards flashed):**
+1. "Press UR does not fire, I navigate out to another screen" — the raid
+   session auto-retries, so the boards cycle fight (~30 s) -> idle (~40 s);
+   on the IDLE raid view UR fell through to global navigation and dumped
+   the user onto another screen, then the next fight yanked them back.
+   FIX: UR is parked on SCR_GAME entirely (fire while fighting, no-op while
+   idle); UL still navigates away.
+2. "The raid screen text overlaps" — two causes: (a) the idle strings were
+   longer than the 96 px screen and WRAPPED onto the next text row
+   ("partner wearable near", "co-op boss, board vs board"); (b) during the
+   fight the controls hint at y=54 rendered on top of the ships (the arena
+   spans the full 64 px height). FIX: idle strings shortened to <=16 chars,
+   and the fight view draws the result line only when the game is finished
+   (the controls hint lives on the idle view).
+
+**Station arrangement:** the S21+ (miya) + both boards stay on the bench;
+the S24 FE (toma) is out with the user. The lingering raid session was
+cancelled (it kept auto-arming fights on the boards). With the FE away the
+raid and explore gates block by design (both players' fixes must be at the
+landmark / in the geofence) — single-phone quests (together PIN needs both
+wearables too; quiz needs both answers) are likewise two-party. The boards
+run the final firmware (deaf-module recovery + all raid/screen fixes);
+loggers attached for the overnight soak.

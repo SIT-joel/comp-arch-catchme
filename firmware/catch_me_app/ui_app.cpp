@@ -120,12 +120,20 @@ void UiApp::tick() {
   }
 
   // v2 raid screen: fight controls (LL left, LR right, UR fire; UL parked —
-  // no navigation away mid-fight).
-  if (screen_ == SCR_GAME && g_ble.raid_active()) {
-    if (pressed & TSButtonLowerLeft) g_game.input_move(-1);
-    if (pressed & TSButtonLowerRight) g_game.input_move(1);
-    if (pressed & TSButtonUpperRight) g_game.input_fire();
-    return;
+  // no navigation away mid-fight). UR is PARKED on the idle raid view too:
+  // the raid session auto-retries (the boards cycle fight -> idle -> fight
+  // every ~75 s), so UR navigating away mid-cycle dumped the user on another
+  // screen and the next fight yanked them straight back (user report 14 Nov:
+  // "press UR does not fire, I navigate out to another screen"). Fire is a
+  // no-op while idle; leave the raid screen with UL (previous screen).
+  if (screen_ == SCR_GAME) {
+    if (g_ble.raid_active()) {
+      if (pressed & TSButtonLowerLeft) g_game.input_move(-1);
+      if (pressed & TSButtonLowerRight) g_game.input_move(1);
+      if (pressed & TSButtonUpperRight) g_game.input_fire();
+      return;  // the fight owns all four buttons
+    }
+    if (pressed & TSButtonUpperRight) return;  // parked: no navigation
   }
 
   // Snack Catch mini-game view (launched from PET or CARE): owns the lower
@@ -894,7 +902,9 @@ void UiApp::render_quiz() {
 
 void UiApp::render_raid() {
   // Idle: raid info — the fight starts from the phone (landmark raid quest);
-  // this screen shows readiness honestly and the last result.
+  // this screen shows readiness honestly and the last result. Every string
+  // stays under ~16 chars: longer strings WRAP at the 96 px screen edge and
+  // collide with the next row (user report 14 Nov: "text overlaps").
   if (!g_ble.raid_active() && !g_game.active()) {
     display_.setFont(liberationSans_10ptFontInfo);
     display_.setCursor(0, 0);
@@ -906,21 +916,21 @@ void UiApp::render_raid() {
     const PeerObservation& peer = g_ble.last_peer();
     if (peer.device != 0 && peer.fresh) {
       display_.fontColor(TS_8b_Green, TS_8b_Black);
-      display_.print("partner wearable near");
+      display_.print("partner near");
     } else {
       display_.fontColor(TS_8b_Gray, TS_8b_Black);
-      display_.print("need partner wearable");
+      display_.print("need partner");
     }
     display_.setCursor(0, 28);
     display_.fontColor(TS_8b_White, TS_8b_Black);
-    display_.print("start: raid in app");
+    display_.print("start: phone app");
     display_.setCursor(0, 40);
     if (g_game.finished()) {
       display_.fontColor(g_game.won() ? TS_8b_Green : TS_8b_Red, TS_8b_Black);
       display_.print(g_game.won() ? "last: WON" : "last: lost");
     } else {
       display_.fontColor(TS_8b_Gray, TS_8b_Black);
-      display_.print("co-op boss, board vs board");
+      display_.print("co-op boss fight");
     }
     display_.setCursor(0, 50);
     display_.fontColor(TS_8b_Gray, TS_8b_Black);
@@ -957,17 +967,17 @@ void UiApp::render_raid() {
     display_.drawRect(p1.x - 3, GAME_ARENA_H - 5, 7, 3, 1, TS_8b_Blue);
   }
 
-  // Lives + result line.
+  // Lives + result line. The bottom row is RESERVED for the ships (the
+  // arena spans the full 64 px height) — the controls hint is NOT drawn
+  // during the fight: it rendered on top of the ships (user report 14 Nov).
+  // The idle raid view carries the controls hint instead.
   display_.setCursor(56, 0);
   display_.fontColor(TS_8b_Gray, TS_8b_Black);
   display_.print("x");
   display_.print(g_game.player(DEVICE_ID == 1 ? 0 : 1).lives);
-  display_.setCursor(0, 54);
   if (g_game.finished()) {
+    display_.setCursor(0, 54);
     display_.fontColor(g_game.won() ? TS_8b_Green : TS_8b_Red, TS_8b_Black);
     display_.print(g_game.won() ? "RAID WON!" : "raid lost");
-  } else {
-    display_.fontColor(TS_8b_Gray, TS_8b_Black);
-    display_.print("LL< >LR move  UR fire");
   }
 }
