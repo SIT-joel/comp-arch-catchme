@@ -327,7 +327,7 @@ void loop() {
   // (mirrors a physical A-D press). ONE reader loop: two readers race for
   // the buffer (verified live — the RAID loop drained the QANS lines).
   while (SerialLog.available()) {
-    static char line_buf[8];
+    static char line_buf[12];
     static uint8_t line_len = 0;
     char c = (char)SerialLog.read();
     if (c == '\n' || c == '\r') {
@@ -340,6 +340,15 @@ void loop() {
         const bool ok = g_ui.bench_quiz_answer((uint8_t)(line_buf[5] - '0'));
         SerialLog.print("quiz: bench answer ");
         SerialLog.println(ok ? "sent" : "NOT sent (inactive/already sent/no link)");
+      } else if (line_len == 8 && strncmp(line_buf, "PIN ", 4) == 0 &&
+                 line_buf[4] >= '0' && line_buf[4] <= '9' &&
+                 line_buf[5] >= '0' && line_buf[5] <= '9' &&
+                 line_buf[6] >= '0' && line_buf[6] <= '9' &&
+                 line_buf[7] >= '0' && line_buf[7] <= '9') {
+        // Bench trigger: submits the PIN exactly as the physical pad would.
+        const bool ok = g_ui.bench_pin_entry(line_buf + 4);
+        SerialLog.print("pin: bench entry ");
+        SerialLog.println(ok ? "sent" : "NOT sent (not in PIN phase/no link)");
       } else if (line_len == 4 && strncmp(line_buf, "CARE", 4) == 0) {
         // Bench trigger: mirrors a physical stroke on the pet screen —
         // queues the daily care event for the phone to claim (+10 XP).

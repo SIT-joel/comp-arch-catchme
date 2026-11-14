@@ -215,6 +215,14 @@ class AppModel(private val context: Context, baseUrl: String) {
         var failedStreak = 0
         while (true) {
             delay(2500)
+            // GPS keep-alive: Samsungs throttle the app's location request to
+            // a 10-MINUTE interval under battery management (verified 14 Nov:
+            // ProviderRequest @2s rewritten to @10m0s0ms — quest fix stamps
+            // froze and the explore geofence rejected them). Both phones are
+            // also deviceidle-whitelisted; re-request updates every ~20 s so
+            // delivery resumes within one keep-alive cycle if the OS scales
+            // the interval back.
+            keepGpsAlive()
             val state = ble.state.value
             // v2 raid: while the wearables fight they own the radio — the
             // phone must NOT hammer reconnects. Pause until the window ends
@@ -785,9 +793,42 @@ class AppModel(private val context: Context, baseUrl: String) {
     // Phone GPS (v2): the ONLY location source in the product. One shared
     // LocationManager fix stamped onto relayed telemetry with its TRUE age.
     private var gpsListener: android.location.LocationListener? = null
+    private var lastGpsReRegisterMs = 0L
+
+    /** Re-register the location listeners WITHOUT dropping the fix. Verified
+     * live (14 Nov): both Samsungs (S21+ One UI, S24 FE Android 16) PERMANENTLY
+     * stop delivering location updates after a screen off/on cycle — the
+     * listener survives but never fires again until the app restarts, which
+     * froze every quest's fix stamp (record relays carried a growing fix age
+     * and the explore geofence rejected them). Re-requesting updates on the
+     * same listener resumes delivery instantly. Called periodically from the
+     * state loop; cheap (two provider registrations, no scan). */
+    fun keepGpsAlive() {
+        val listener = gpsListener ?: return
+        val now = System.currentTimeMillis()
+        if (now - lastGpsReRegisterMs < 8_000) return
+        lastGpsReRegisterMs = now
+        try {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+                ?: return
+            lm.removeUpdates(listener)
+            runCatching {
+                lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER,
+                    2000L, 1f, listener, android.os.Looper.getMainLooper())
+            }
+            runCatching {
+                lm.requestLocationUpdates(android.location.LocationManager.NETWORK_PROVIDER,
+                    5000L, 5f, listener, android.os.Looper.getMainLooper())
+            }
+            android.util.Log.i("AppModel", "GPS listeners re-registered (keep-alive)")
+        } catch (e: SecurityException) {
+            android.util.Log.w("AppModel", "GPS keep-alive refused: ${e.message}")
+        }
+    }
 
     fun startGps() {
         if (gpsListener != null) return
+        lastGpsReRegisterMs = System.currentTimeMillis()
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
             ?: return
         val listener = android.location.LocationListener { location ->

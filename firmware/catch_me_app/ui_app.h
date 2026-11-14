@@ -45,6 +45,22 @@ class UiApp {
     }
     return false;
   }
+
+  // Bench trigger (serial "PIN 1234"): submits the four-digit PIN exactly as
+  // the physical pad would (digits + the final lower-right press). Only
+  // accepted while the interaction is in a PIN-entry phase (1 start / 3 end).
+  bool bench_pin_entry(const char* digits) {
+    const InteractionStateMsg& it = g_ble.interaction();
+    if (it.phase != 1 && it.phase != 3) return false;
+    for (uint8_t k = 0; k < 4; ++k) {
+      if (digits[k] < '0' || digits[k] > '9') return false;
+      pin_digits_[k] = (uint8_t)(digits[k] - '0');
+    }
+    pin_digit_ = 3;
+    pin_edit_ = true;
+    send_interaction_command(1, it.stage, it.partner_code_version, digits);
+    return true;
+  }
   // Phone-relayed quiz progress: active=0 leaves quiz mode. An idx CHANGE
   // (or quiz end) acknowledges the pending answer. Quiz completion
   // (active 1->0 with a quiz under way) fires the reward banner: the
@@ -72,6 +88,8 @@ class UiApp {
     reward_title_[sizeof(reward_title_) - 1] = 0;
     reward_until_ms_ = millis() + 8000;
     reward_level_at_ = g_petcore.server_level();
+    SerialUSB.print("ui: reward banner: ");
+    SerialUSB.println(reward_title_);
   }
 
   // 10 ms tick: retransmit the pending answer until acknowledged.
