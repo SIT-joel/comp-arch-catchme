@@ -9,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -236,7 +238,6 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                     Text("Demo mode (short durations)")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val landmarkOptions = ui.landmarks
                     Button(onClick = { model.questAction("together", demoMode) { _, _ -> } }) {
                         Text("Together")
                     }
@@ -246,7 +247,19 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                     Button(onClick = { model.questAction("quiz", demoMode) { _, _ -> } }) {
                         Text("Quiz")
                     }
-                    // v2: raid needs a landmark; listed landmarks load in AppModel.
+                }
+                // v2: raid needs a landmark; the buttons WRAP (a single Row
+                // pushed them off-screen — six buttons never fit a phone
+                // width, so the Raid buttons were invisible, 14 Nov).
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val landmarkOptions = ui.landmarks
+                    if (landmarkOptions.isEmpty()) {
+                        Text("Raid: loading landmarks...", style = MaterialTheme.typography.bodySmall)
+                    }
                     landmarkOptions.forEach { lm ->
                         Button(onClick = { model.questAction("raid", demoMode, lm.id) { _, _ -> } }) {
                             Text("Raid: ${lm.name}")
