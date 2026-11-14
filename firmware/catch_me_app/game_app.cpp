@@ -11,8 +11,9 @@ void GameApp::begin(bool host) {
   finished_ = false;
   won_ = false;
   tick_ = 0;
-  // Demo flag comes from the relayed session state (frozen at activation).
-  boss_hp_max_ = boss_hp_ = g_ble.session().demo ? GAME_BOSS_HP_DEMO : GAME_BOSS_HP_NORMAL;
+  // Boss HP follows the raid-start's demo byte (the session raid relays the
+  // session's demo flag; the practice raid always runs demo HP — 14 Nov).
+  boss_hp_max_ = boss_hp_ = g_ble.raid_demo_hp() ? GAME_BOSS_HP_DEMO : GAME_BOSS_HP_NORMAL;
   boss_x_ = 48;
   boss_dir_ = 1;
   for (auto& p : players_) {

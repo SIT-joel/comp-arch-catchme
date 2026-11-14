@@ -266,6 +266,12 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                         }
                     }
                 }
+                // Practice fight: no session, no landmark gate, no server —
+                // arms this phone's board as the raid client; the host board
+                // auto-arms from the raid flag in its scan. Pure demo fight.
+                Button(onClick = { model.practiceRaid() }) {
+                    Text("Practice fight")
+                }
             }
         }
     }
