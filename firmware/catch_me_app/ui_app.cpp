@@ -25,9 +25,6 @@ void UiApp::tick() {
   const InteractionStateMsg& interaction = g_ble.interaction();
   if (interaction.phase != last_phase_) {
     last_phase_ = interaction.phase;
-    if (g_ble.raid_active() && screen_ != SCR_GAME) {
-      screen_ = SCR_GAME;  // the fight takes over the display
-    }
     if (interaction.phase == 1 || interaction.phase == 3) {
       screen_ = SCR_INTERACTION;
       pin_edit_ = true;
@@ -119,22 +116,9 @@ void UiApp::tick() {
     return;  // the pad owns all four buttons
   }
 
-  // v2 raid screen: fight controls (LL left, LR right, UR fire; UL parked —
-  // no navigation away mid-fight). UR is PARKED on the idle raid view too:
-  // the raid session auto-retries (the boards cycle fight -> idle -> fight
-  // every ~75 s), so UR navigating away mid-cycle dumped the user on another
-  // screen and the next fight yanked them straight back (user report 14 Nov:
-  // "press UR does not fire, I navigate out to another screen"). Fire is a
-  // no-op while idle; leave the raid screen with UL (previous screen).
-  if (screen_ == SCR_GAME) {
-    if (g_ble.raid_active()) {
-      if (pressed & TSButtonLowerLeft) g_game.input_move(-1);
-      if (pressed & TSButtonLowerRight) g_game.input_move(1);
-      if (pressed & TSButtonUpperRight) g_game.input_fire();
-      return;  // the fight owns all four buttons
-    }
-    if (pressed & TSButtonUpperRight) return;  // parked: no navigation
-  }
+  // v2 raid screen: REMOVED 14 Nov (the raid quest was cut — the
+  // board-to-board sustained link drops at 23-30 s, a hardware wall). The
+  // rotation is PET / CARE / NEAR; the quiz and PIN takeovers unchanged.
 
   // Snack Catch mini-game view (launched from PET or CARE): owns the lower
   // buttons; UL exits.
@@ -237,9 +221,8 @@ void UiApp::render() {
   display_.clearScreen();
   // Reward banner (8 s) overrides ordinary screens: the quest's XP impact
   // must be visible on the wearable itself, not only in the phone app. The
-  // raid fight and PIN-evidence screens keep ownership of the display.
-  const bool fight_owning = g_game.active() || g_ble.raid_active();
-  if (reward_until_ms_ != 0 && millis() < reward_until_ms_ && !fight_owning &&
+  // PIN-evidence screen keeps ownership of the display.
+  if (reward_until_ms_ != 0 && millis() < reward_until_ms_ &&
       screen_ != SCR_INTERACTION) {
     display_.setFont(liberationSans_10ptFontInfo);
     display_.setCursor(0, 0);
@@ -276,7 +259,6 @@ void UiApp::render() {
     case SCR_PET: render_pet(); break;
     case SCR_CARE: render_care(); break;
     case SCR_DISC: render_disc(); break;
-    case SCR_GAME: render_raid(); break;
     case SCR_QUIZ: render_quiz(); break;
     case SCR_INTERACTION: render_interaction(); break;
     default: render_pet(); break;
@@ -285,7 +267,7 @@ void UiApp::render() {
   // stays clean (its own status line occupies the footer); interaction
   // renders its own footer.
   if (screen_ != SCR_INTERACTION && screen_ != SCR_PET && screen_ != SCR_QUIZ) {
-    static const char* kNames[SCREEN_COUNT] = {"PET", "CARE", "NEAR", "RAID"};
+    static const char* kNames[SCREEN_COUNT] = {"PET", "CARE", "NEAR"};
     display_.setFont(liberationSans_8ptFontInfo);
     display_.fontColor(TS_8b_Gray, TS_8b_Black);
     display_.setCursor(0, 58);
@@ -898,86 +880,6 @@ void UiApp::render_quiz() {
   }
 }
 
-// ---- v2 raid fight rendering (both boards; state mirrors the host) ----
-
-void UiApp::render_raid() {
-  // Idle: raid info — the fight starts from the phone (landmark raid quest);
-  // this screen shows readiness honestly and the last result. Every string
-  // stays under ~16 chars: longer strings WRAP at the 96 px screen edge and
-  // collide with the next row (user report 14 Nov: "text overlaps").
-  if (!g_ble.raid_active() && !g_game.active()) {
-    display_.setFont(liberationSans_10ptFontInfo);
-    display_.setCursor(0, 0);
-    display_.fontColor(TS_8b_Gray, TS_8b_Black);
-    display_.print("RAID");
-
-    display_.setFont(liberationSans_8ptFontInfo);
-    display_.setCursor(0, 16);
-    const PeerObservation& peer = g_ble.last_peer();
-    if (peer.device != 0 && peer.fresh) {
-      display_.fontColor(TS_8b_Green, TS_8b_Black);
-      display_.print("partner near");
-    } else {
-      display_.fontColor(TS_8b_Gray, TS_8b_Black);
-      display_.print("need partner");
-    }
-    display_.setCursor(0, 28);
-    display_.fontColor(TS_8b_White, TS_8b_Black);
-    display_.print("start: phone app");
-    display_.setCursor(0, 40);
-    if (g_game.finished()) {
-      display_.fontColor(g_game.won() ? TS_8b_Green : TS_8b_Red, TS_8b_Black);
-      display_.print(g_game.won() ? "last: WON" : "last: lost");
-    } else {
-      display_.fontColor(TS_8b_Gray, TS_8b_Black);
-      display_.print("co-op boss fight");
-    }
-    display_.setCursor(0, 50);
-    display_.fontColor(TS_8b_Gray, TS_8b_Black);
-    display_.print("LL< >LR  UR fire");
-    return;
-  }
-
-  display_.setFont(liberationSans_8ptFontInfo);
-  display_.setCursor(0, 0);
-  display_.fontColor(TS_8b_White, TS_8b_Black);
-  display_.print("BOSS ");
-  display_.print(g_game.boss_hp());
-  display_.print("/");
-  display_.print(g_game.boss_hp_max());
-
-  // Boss body.
-  fill_ellipse(display_, g_game.boss_x(), g_game.boss_y(), 7, 4, TS_8b_Red);
-  display_.drawPixel(g_game.boss_x(), g_game.boss_y() + 4, TS_8b_Yellow);
-
-  // Bullets.
-  int8_t bx[4], by[4];
-  const uint8_t n = g_game.bullets(bx, by, 4);
-  for (uint8_t k = 0; k < n; k++) {
-    display_.drawRect((uint8_t)bx[k], (uint8_t)by[k], 2, 3, 1, TS_8b_Yellow);
-  }
-
-  // Ships: you = green bottom, partner = blue (both boards render both).
-  const GamePlayer& p0 = g_game.player(0);
-  const GamePlayer& p1 = g_game.player(1);
-  if (p0.lives > 0) {
-    display_.drawRect(p0.x - 3, GAME_ARENA_H - 10, 7, 4, 1, TS_8b_Green);
-  }
-  if (p1.lives > 0) {
-    display_.drawRect(p1.x - 3, GAME_ARENA_H - 5, 7, 3, 1, TS_8b_Blue);
-  }
-
-  // Lives + result line. The bottom row is RESERVED for the ships (the
-  // arena spans the full 64 px height) — the controls hint is NOT drawn
-  // during the fight: it rendered on top of the ships (user report 14 Nov).
-  // The idle raid view carries the controls hint instead.
-  display_.setCursor(56, 0);
-  display_.fontColor(TS_8b_Gray, TS_8b_Black);
-  display_.print("x");
-  display_.print(g_game.player(DEVICE_ID == 1 ? 0 : 1).lives);
-  if (g_game.finished()) {
-    display_.setCursor(0, 54);
-    display_.fontColor(g_game.won() ? TS_8b_Green : TS_8b_Red, TS_8b_Black);
-    display_.print(g_game.won() ? "RAID WON!" : "raid lost");
-  }
-}
+// (render_raid removed 14 Nov: the raid quest was cut - the board-to-board
+// sustained link drops at 23-30 s, a hardware wall documented across every
+// configuration since 12 Nov; the demo focus is proximity, quests, leveling.)

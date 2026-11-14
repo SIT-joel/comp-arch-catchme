@@ -2,7 +2,7 @@
 
 ## Quest interaction v1 (implemented; v2 quest set)
 
-The approved behavior is in [QUEST_INTERACTION_PLAN.md](QUEST_INTERACTION_PLAN.md). New together sessions activated after both users accept get `interaction_version=1`; legacy rows with a null version retain the previous evaluator. **v2: `heart_challenge` is removed** — creation is rejected, the choice/skip routes below are withdrawn, and legacy heart sessions keep serializing read-only. The new `raid` quest uses the same command-idempotency pattern for outcome reports.
+The approved behavior is in [QUEST_INTERACTION_PLAN.md](QUEST_INTERACTION_PLAN.md). New together sessions activated after both users accept get `interaction_version=1`; legacy rows with a null version retain the previous evaluator. **v2: `heart_challenge` is removed** — creation is rejected, the choice/skip routes below are withdrawn, and legacy heart sessions keep serializing read-only. **v2.1 (14 Nov): `raid` is removed** — creation is rejected as an unknown quest; legacy raid sessions (and the outcome route) keep serializing read-only.
 
 Participant routes:
 
@@ -17,7 +17,7 @@ All mutation commands are participant-authorized and idempotent by command ID. P
 
 New together sessions enter `start_pin`, then `timing`, then `end_pin`. Presence evidence is filtered to observations captured after `timing_started_at`; progress caps at target while the final exchange is pending. Rewards issue only after both end entries. Demo defaults are visibly enabled in the clients; demo together is 30 s, and its normal target remains 600 s.
 
-Raid sessions: activation gate (phone fixes within 50 m of the frozen landmark + mutual peer presence), the board-to-board fight (outside server scope), then both outcome reports complete the session and award once.
+(Raid sessions: historical only — the quest was removed 14 Nov; the outcome route stays for legacy read paths.)
 
 ## Pet (v2)
 

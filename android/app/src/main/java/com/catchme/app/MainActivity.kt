@@ -248,30 +248,10 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                         Text("Quiz")
                     }
                 }
-                // v2: raid needs a landmark; the buttons WRAP (a single Row
-                // pushed them off-screen — six buttons never fit a phone
-                // width, so the Raid buttons were invisible, 14 Nov).
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    val landmarkOptions = ui.landmarks
-                    if (landmarkOptions.isEmpty()) {
-                        Text("Raid: loading landmarks...", style = MaterialTheme.typography.bodySmall)
-                    }
-                    landmarkOptions.forEach { lm ->
-                        Button(onClick = { model.questAction("raid", demoMode, lm.id) { _, _ -> } }) {
-                            Text("Raid: ${lm.name}")
-                        }
-                    }
-                }
-                // Practice fight: no session, no landmark gate, no server —
-                // arms this phone's board as the raid client; the host board
-                // auto-arms from the raid flag in its scan. Pure demo fight.
-                Button(onClick = { model.practiceRaid() }) {
-                    Text("Practice fight")
-                }
+                // (The Raid landmark buttons and the Practice fight button
+                // were removed 14 Nov: the raid quest was cut — the
+                // board-to-board sustained link drops at 23-30 s, a hardware
+                // wall. The quest set is together, explore, quiz.)
             }
         }
     }

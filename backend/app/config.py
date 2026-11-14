@@ -81,14 +81,6 @@ class Settings(BaseSettings):
                 "demo_duration_ms": self.quest_explore_demo_ms,
             },
             {
-                "quest_id": "raid",
-                "name": "Landmark Raid",
-                "description": "Meet your partner at a landmark and co-op defeat the boss on your wearables.",
-                "evidence": "both phone fixes at the landmark plus mutual peer presence; both boards' outcome reports",
-                "normal_duration_ms": self.quest_raid_normal_ms,
-                "demo_duration_ms": self.quest_raid_demo_ms,
-            },
-            {
                 "quest_id": "quiz",
                 "name": "Know Your Partner",
                 "description": "Answer multiple-choice questions about your partner's profile - ask them to learn the answers, then pick on your wearable.",
@@ -97,6 +89,11 @@ class Settings(BaseSettings):
                 "demo_duration_ms": self.quest_raid_demo_ms,
             },
         ]
+        # (The "raid" quest was removed 14 Nov by user decision: the
+        # board-to-board sustained link drops at 23-30 s — a hardware wall
+        # documented across every configuration since 12 Nov. Legacy raid
+        # sessions stay readable; raid creation is rejected as an unknown
+        # quest. The demo focus is proximity, quests, leveling.)
 
     def quest_config(self, quest_id: str) -> dict | None:
         return next((q for q in self.quest_catalog() if q["quest_id"] == quest_id), None)

@@ -1,12 +1,12 @@
-# Quest interaction plan v2: together PINs, landmark raid; heart quest removed
+# Quest interaction plan v2: together PINs; heart + raid quests removed
 
 Revision: 6 November 2026 (v2, user-directed). Extends the approved 30 October revision; the Together PIN specification below is unchanged and already implemented. **The heart-rate quest (`heart_challenge`) is removed from the product**: creation rejected, UI hidden, sensor dropped. Historical heart sessions stay readable.
 
 ## Demo defaults
 
 - Together quest: **30 seconds of verified direct Bluetooth presence**, with mutual four-digit PIN exchange before timing and again before rewards (unchanged).
-- Raid quest: a co-op boss fight at a real landmark. Demo mode shortens boss HP so a fight completes in roughly one minute; normal mode takes longer. Both boards must report the fight outcome before awards.
-- Quest IDs: `together`, `explore`, `raid`. `heart_challenge` remains a known legacy ID for reading history only.
+- Quest IDs: `together`, `explore`, `quiz`. `heart_challenge` and `raid` remain known legacy IDs for reading history only.
+- **Raid removal (14 November 2026, user-directed):** the board-to-board sustained link drops at 23-30 s — a hardware wall documented across every configuration since 12 Nov. Raid creation is rejected; the raid flow below stays as the historical record.
 - Demo mode stays the default selection on quest-start screens, visibly labeled and stored per session.
 - Successful sessions still award each participant 100 points and 100 XP exactly once.
 

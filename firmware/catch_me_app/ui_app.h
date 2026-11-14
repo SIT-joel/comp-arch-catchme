@@ -109,11 +109,14 @@ class UiApp {
   // The four cycled screens (UR/UL navigation). SCR_INTERACTION sits AFTER
   // SCREEN_COUNT: it is only entered by the interaction-phase takeover and
   // never by the cycle.
-  enum Screen : uint8_t { SCR_PET = 0, SCR_CARE, SCR_DISC, SCR_GAME, SCREEN_COUNT, SCR_INTERACTION = SCREEN_COUNT, SCR_QUIZ };
+  enum Screen : uint8_t { SCR_PET = 0, SCR_CARE, SCR_DISC, SCREEN_COUNT, SCR_INTERACTION = SCREEN_COUNT, SCR_QUIZ };
+  // (SCR_GAME removed 14 Nov: the raid quest was cut — the board-to-board
+  // sustained link drops at 23-30 s, a hardware wall documented across every
+  // configuration since 12 Nov. The quest set is together, explore, quiz.)
   void render_pet();
   void render_care();
   void render_disc();
-  void render_raid();
+  // (render_raid removed 14 Nov with the raid quest.)
   void render_game();
   void render_interaction();
   void render_quiz();
@@ -156,8 +159,7 @@ class UiApp {
 
  public:
   bool wants_fast_render() const {
-    return (screen_ == SCR_PET && game_view_) || g_game.active() ||
-           g_ble.raid_active();
+    return screen_ == SCR_PET && game_view_;
   }
 
  private:

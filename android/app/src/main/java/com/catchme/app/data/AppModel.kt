@@ -504,19 +504,6 @@ class AppModel(private val context: Context, baseUrl: String) {
                     sessionToken = token,
                     sessionId = session?.let { UUID.fromString(it.getString("session_id")) })
                 if (ble.state.value is BleLink.State.Connected) {
-                    // Practice fight retry: the practice send retries every
-                    // connected cycle while its 30 s window is open — the TDD
-                    // disconnects eat single-shot sends (verified live). Each
-                    // accepted send stamps the arm signal: the board responds
-                    // by dropping the phone, and BleLink pauses reconnects on
-                    // that disconnect (the fight owns the radio).
-                    if (System.currentTimeMillis() < practiceRaidUntil) {
-                        if (ble.send(Frame.MSG_RAID_START, byteArrayOf(2, 1))) {
-                            ble.notifyPracticeSend()
-                            raidFightUntil = System.currentTimeMillis() + 75_000L
-                            _ui.value = _ui.value.copy(raidFight = true)
-                        }
-                    }
                     // v2 XP visibility: the pet mirror (level/XP) must refresh
                     // after quest awards, not only at sign-in — otherwise the
                     // pet card and the wearable's level stay stale until the
@@ -566,38 +553,6 @@ class AppModel(private val context: Context, baseUrl: String) {
         val session = ds.optJSONObject("session")
         val out = ByteArray(17 + 24)
         if (session != null && session.getString("state") == "active") {
-            // v2 raid: the moment a raid session activates, tell the wearable
-            // to enter raid mode (drop the phone link, fight over the direct
-            // connection). Once per session id; the supervisor pauses while
-            // the radio belongs to the fight.
-            // Contract: the session object's id field is "session_id" (an
-            // earlier build read "id", which threw and aborted the whole
-            // SESSION_STATE relay whenever a raid session was active).
-            val sessionIdStr = session.getString("session_id")
-            // Re-send EVERY connected cycle while the raid is active: the
-            // fire-once version landed in disconnected TDD windows and the
-            // boards never entered raid mode (verified live 12 Nov). The
-            // board's raid_start() is idempotent, the fight drops the phone
-            // link (stopping the relay naturally), and a rebooted board is
-            // re-triggered on its phone's next relink. Session completion
-            // (state != active) ends the relay.
-            if (session.getString("quest_id") == "raid") {
-                raidFightUntil = System.currentTimeMillis() + 75_000L
-                // The fight owns the radio: drop the phone link and hold all
-                // reconnects (the paced post-TDD reconnect raced the board's
-                // staged raid teardown and starved the board-to-board link —
-                // observed live 14 Nov as create_connection-rejected loops).
-                ble.pauseReconnects(75_000L)
-                val start = ByteArray(2)
-                start[0] = 1
-                start[1] = if (session.optBoolean("demo")) 1 else 0
-                ble.send(Frame.MSG_RAID_START, start)
-                _ui.value = _ui.value.copy(raidFight = true)
-                if (raidStartSentFor != sessionIdStr) {
-                    raidStartSentFor = sessionIdStr
-                    android.util.Log.i("AppModel", "raid-start relayed for $sessionIdStr")
-                }
-            }
             out[0] = 1
             out[1] = when (session.getString("quest_id")) {
                 "together" -> 1; "explore" -> 2; "raid" -> 4; else -> 3 // 3 = legacy heart
@@ -790,20 +745,11 @@ class AppModel(private val context: Context, baseUrl: String) {
         }
     }
 
-    /** Practice fight (14 Nov): arms THIS phone's board as the raid client
-     *  with NO session, NO landmark gate and NO server — the client advertises
-     *  with the raid flag and the host board auto-arms from its scan. Pure
-     *  demo: the fight runs board-to-board and the result shows on the boards.
-     *  payload[0]=2 marks it a practice raid; payload[1]=1 runs demo HP (20).
-     *  The send RETRIES every connected cycle for 30 s (the TDD disconnects
-     *  eat single-shot sends). NO reconnect pause during the window: the
-     *  retries NEED the link; the arm signal (the board drops the phone right
-     *  after accepting a raid-start) triggers the pause in BleLink instead. */
-    fun practiceRaid() {
-        practiceRaidUntil = System.currentTimeMillis() + 30_000L
-    }
+    // (practiceRaid removed 14 Nov: the raid quest was cut — the
+    //  board-to-board sustained link drops at 23-30 s, a hardware wall.)
 
-    fun acceptSession(id: UUID, onResult: (Boolean, String?) -> Unit) {        scope.launch {
+    fun acceptSession(id: UUID, onResult: (Boolean, String?) -> Unit) {
+        scope.launch {
             try { api.acceptSession(id); onResult(true, null) }
             catch (e: Exception) { onResult(false, e.message) }
         }

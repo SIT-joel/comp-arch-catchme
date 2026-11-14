@@ -2483,3 +2483,43 @@ user interaction; the demo uses real touches).
 sign-in screen despite the token validating (the restore succeeded per the
 log while the UI stayed on sign-in). Manual sign-in works every time; the
 demo starts with a manual sign-in anyway.
+
+## RAID QUEST REMOVED — 14 Nov 18:05 (user decision)
+
+**User direction:** remove the raid feature and focus on Bluetooth
+proximity, quests, and leveling — "the main purpose is making friends or
+finding a date." Accepted: the raid's board-to-board sustained link drops
+at 23-30 s (a hardware wall documented across every configuration since
+12 Nov — the gate experiment, the session fights, and the practice fights
+all hit it), and the raid generated more failure modes than the rest of
+the product combined.
+
+**Removed across all layers (the heart-quest removal pattern):**
+- Server: the raid quest catalog entry gone — creation is rejected as an
+  unknown quest (422 invalid_quest); historical raid sessions stay
+  readable; the outcome route stays for legacy read paths. Tests
+  rewritten: raid creation rejected + together creation still works
+  (82/82 pass).
+- Firmware: the wearable rotation is PET / CARE / NEAR (the RAID screen,
+  render_raid, the fight HUD, and the fight controls removed); raid_start
+  dead-ends (every arm path — the phone relay, the practice button, the
+  bench trigger, the flag auto-arm — unreachable); the serial RAID
+  trigger and MSG_RAID_START handling removed. Sketch: D1 53,840 B /
+  D2 53,276 B (was 55.7/55.0). Both boards flashed.
+- Phone: the Raid landmark buttons, the Practice fight button, the
+  practice retry, and the raid-start relay removed (the quest buttons are
+  Together / Explore / Quiz). Both phones installed; the Quests section
+  verified on the S21+.
+
+**Kept:** the general-robustness fixes shipped alongside the raid work
+(the paced reconnect, the reconnect pause mechanics, the deaf-module and
+event-dead recovery detectors, the restore retry, the GPS keep-alive);
+the board-to-board finding stays documented as a hardware limitation;
+the raid state code in ble_app/game_app stays compiled but unreachable
+(raid_start dead-ends; raid_mode_ never becomes true).
+
+**Demo flow (final)**: discovery (GPS+BLE match -> invite -> partnership)
+-> together (mutual PIN + stillness) -> explore (geofence visit) -> quiz
+(Know Your Partner, both wearables' A-D pads) -> leveling + pet care ->
+reward shop. XP visibility: the reward banner on the boards, the live pet
+cards on the phones, the web dashboard.
