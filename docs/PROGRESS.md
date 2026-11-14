@@ -2259,3 +2259,54 @@ the ADV window → full 5.9 s LINKED windows intact. The board's peer-evidence
 path now works with the phone adjacent — the proximity/quest evidence
 requirement holds in the worst-case bench layout. Initial user-initiated
 scans stay BALANCED (short, needed); `spit` SPI-bound counter stayed low.
+
+## S24 FE dual-phone E2E + GPS keep-alive + PIN bench trigger — 14 Nov 13:35
+
+**S24 FE set up as toma's phone** (APK installed, tunnel-native prefs,
+toma session restored, board 1 link verified). Both phones linked
+simultaneously; BOTH boards' peer evidence climbs while both phones are
+linked (B1 peers 9->10, B2 12->14 during every scan window).
+
+**Explore quest COMPLETED end-to-end with both phones**: +100/+100 exactly
+once (both users level 5 at the time), reward banner captured on board 1
+serial ("ui: reward banner: QUEST COMPLETE" 12:50:58). The blocker chain
+that had to be fixed first:
+1. Samsung throttles the app's location request to a 10-MINUTE interval
+   (dumpsys evidence: ProviderRequest @2s rewritten to @10m0s0ms) — quest
+   fix stamps froze and the geofence evaluation rejected every record.
+   FIX: GPS keep-alive in AppModel (re-request location updates every 8 s,
+   verified to resume delivery instantly) + deviceidle whitelist + 
+   RUN_ANY_IN_BACKGROUND appop on both phones.
+2. Phone GPS pauses when the screen locks; GPS listeners died permanently
+   after screen off/on until restarted — covered by the same keep-alive.
+3. The 409 session_in_progress blocker from a stale explore session
+   (cancelled; noted that the phone's snackbar is the only sign).
+
+**Quiz quest re-verified with BOTH boards' pads armed simultaneously**
+(session 8d9d63ec): answers submitted on both boards via serial bench
+triggers (retry helper tools/serial_retry.py — the TDD cycle leaves the
+phone link up ~5 s of every ~10 s, so single-shot triggers can land in a
+disconnected window), +100/+100 exactly once.
+
+**Together quest: PIN bench trigger added** (serial "PIN 1234" ->
+ui_app bench_pin_entry -> the same send_interaction_command path as the
+physical pad; firmware flashed on both boards). PIN semantics verified:
+the user submits THE PARTNER'S code (mutual exchange; own_code shows on
+your wearable, partner_code_version rides the interaction state). The
+PIN exchange via the phone-relayed API path advanced the interaction to
+phase timing (target 30 s demo). Evidence accumulation depends on the
+radio phases aligning (observations must chain within 10 s; the TDD
+cadence yields 9-13 s gaps that mostly break chains) — the honest
+gap_intervals semantics are kept (85/85 backend tests pass after
+reverting an over-generous window-coverage attempt); the together quest
+completes when phases align, typically within minutes of cycling.
+
+**Board 2 crashed twice more during the E2E (13:03, ~13:19, uncaptured —
+loggers were killed for the serial dance). B1 stayed up 80+ min.**
+
+**Serial RX on the boards dies minutes after boot** (TX keeps working):
+bench triggers only work in the first ~1-4 min after a flash. Root cause
+in the SAMD core's USB CDC OUT-endpoint handling (DoubleBufferedEPOutHandler
+notify/release race — the same family as the display SPI hazard); a deep
+core fix is pending. Workaround: flash -> submit within the window; the
+DEMO uses physical buttons (proven paths), not serial.
