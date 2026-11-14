@@ -152,8 +152,25 @@ class AppModel(private val context: Context, baseUrl: String) {
         val token = prefs.getString("token", null) ?: return
         api.token = token
         scope.launch {
-            try {
-                val me = api.me()
+            // The tunnel hiccups (Cloudflare 403/error bursts, observed live).
+            // A single failed /me must NOT sign the user out — retry before
+            // falling back; only a definitive 401 clears the session.
+            val me = runCatching {
+                var last: Exception? = null
+                for (attempt in 1..3) {
+                    try {
+                        return@runCatching api.me()
+                    } catch (e: Exception) {
+                        last = e
+                        kotlinx.coroutines.delay(1500L * attempt)
+                    }
+                }
+                throw (last ?: IllegalStateException("restore failed"))
+            }.getOrElse {
+                api.token = null
+                return@launch
+            }
+            runCatching {
                 val device = me.optJSONObject("device")
                 _ui.value = _ui.value.copy(
                     signedIn = true,
@@ -167,8 +184,6 @@ class AppModel(private val context: Context, baseUrl: String) {
                 refreshPetAndLandmarks()
                 startGps()
                 onRestored()
-            } catch (e: Exception) {
-                api.token = null
             }
         }
     }
@@ -550,12 +565,12 @@ class AppModel(private val context: Context, baseUrl: String) {
             // re-triggered on its phone's next relink. Session completion
             // (state != active) ends the relay.
             if (session.getString("quest_id") == "raid") {
-                raidFightUntil = System.currentTimeMillis() + 4 * 60_000L
+                raidFightUntil = System.currentTimeMillis() + 75_000L
                 // The fight owns the radio: drop the phone link and hold all
                 // reconnects (the paced post-TDD reconnect raced the board's
                 // staged raid teardown and starved the board-to-board link —
                 // observed live 14 Nov as create_connection-rejected loops).
-                ble.pauseReconnects(4 * 60_000L)
+                ble.pauseReconnects(75_000L)
                 val start = ByteArray(2)
                 start[0] = 1
                 start[1] = if (session.optBoolean("demo")) 1 else 0

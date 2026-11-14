@@ -711,6 +711,38 @@ void BleApp::tick() {
       cdiag::bc(cdiag::B_TICK, (uint8_t)radio_state_, 0);
     }
   }
+  { /* Deaf-module recovery (14 Nov): the receiver can die WITHOUT any wedge
+     * signature — adv_rx frozen, connections/TX alive, IRQ quiet — observed
+     * after the raid teardown attempts (board 2: 8+ min with zero adverts,
+     * every GATT notification lost). The wedge detector (IRQ stuck + no
+     * reads) never fires for this state. If adverts stopped advancing across
+     * three consecutive 10 s checks AFTER the module had been receiving,
+     * hard-reset the module once per episode (a lone board whose peer left
+     * gets exactly one harmless re-init, not a loop). */
+    static uint32_t last_deaf_check_ms = 0;
+    static uint32_t deaf_check_adv_rx = 0;
+    static uint8_t deaf_checks = 0;
+    static bool deaf_reinit_done = false;
+    if (now_ms - last_deaf_check_ms >= 10000UL) {
+      if (last_deaf_check_ms != 0) {
+        if (adverts_rx_ != deaf_check_adv_rx) {
+          deaf_check_adv_rx = adverts_rx_;
+          deaf_checks = 0;
+          deaf_reinit_done = false;
+        } else if (adverts_rx_ > 0 && !deaf_reinit_done) {
+          if (++deaf_checks >= 3) {
+            SerialLog.println("ble: module deaf (no adverts 30s+); hard reset + re-init");
+            deaf_checks = 0;
+            deaf_reinit_done = true;
+            cdiag::bc(cdiag::B_REINIT, 2, 0);  // a=2: deaf-recovery path
+            module_reinit();
+            return;
+          }
+        }
+      }
+      last_deaf_check_ms = now_ms;
+    }
+  }
 #if CM_GAME_GATE
   gate_tick();
   return;  // the gate owns the radio; the TDD scheduler is suspended
