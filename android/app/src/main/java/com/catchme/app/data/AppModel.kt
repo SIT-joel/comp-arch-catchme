@@ -551,6 +551,11 @@ class AppModel(private val context: Context, baseUrl: String) {
             // (state != active) ends the relay.
             if (session.getString("quest_id") == "raid") {
                 raidFightUntil = System.currentTimeMillis() + 4 * 60_000L
+                // The fight owns the radio: drop the phone link and hold all
+                // reconnects (the paced post-TDD reconnect raced the board's
+                // staged raid teardown and starved the board-to-board link —
+                // observed live 14 Nov as create_connection-rejected loops).
+                ble.pauseReconnects(4 * 60_000L)
                 val start = ByteArray(2)
                 start[0] = 1
                 start[1] = if (session.optBoolean("demo")) 1 else 0

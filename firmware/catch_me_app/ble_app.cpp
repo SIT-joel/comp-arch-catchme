@@ -1173,6 +1173,16 @@ void BleApp::raid_tick() {
         start_advertising();
         raid_adv_started_ = true;
       }
+      // Client timeout: the host times out and exits after 60 s; without
+      // this the client waits in raid mode FOREVER (radio frozen, no TDD,
+      // no phone relink — observed live 14 Nov when the host's phone was
+      // locked). Exit honestly; the phones re-relay raid-start on the next
+      // relink and the whole gate retries.
+      if (now - raid_started_ms_ > 90000UL) {
+        SerialLog.println("raid: no host connected; resuming TDD");
+        raid_mode_ = false;
+        raid_phase_ = RadioStateRaid::RAID_DONE;
+      }
 #else
       if (now >= raid_retry_ms_) {
         tBDAddr peer;  // uint8_t[6], LSB first — board 2 = 03:80:E1:00:34:12
