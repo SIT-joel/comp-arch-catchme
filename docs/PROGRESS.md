@@ -2191,3 +2191,43 @@ adb shell paths (`MSYS2_ARG_CONV_EXCL="*"`, full script paths); gradle
 needs `GRADLE_USER_HOME=D:/catch_me/.gradle-user`. Bench token files
 (`tools/.toma_token`, `tools/.miya_token`) are now gitignored. Phone screen
 timeout temporarily 20 min for the E2E (was 10 min).
+
+## First natural crash dump + SPI root cause + bounded-transfer fix — 14 Nov 09:27
+
+**The forensics chain worked end-to-end on the first real crash.** Board 2
+watchdog-crashed at 09:27 after 52.6 min of uptime; the noinit ring dumped
+the exact tail on the next boot:
+
+- `previous life 3155108 ms` (the bootloader-wipe fix delivering real
+  uptimes — was "0 ms" before).
+- Tail: write-retry breadcrumbs (module buffer full, 26 bytes stuck) → a
+  vendor command answered OK → `free_event_list` (pool=2, rxq=0) →
+  **silence**: no write-retry breadcrumb (fires on any failed attempt) and
+  no send_req-entry breadcrumb (fires immediately after the write returns).
+  The freeze was therefore INSIDE the first `BlueNRG_SPI_Write` → inside
+  `SPI.transfer()`.
+- `HCI_READ_PACKET_NUM_MAX` is (2): pool=2/rxq=0 is the healthy full pool —
+  no packet leak; `free_event_list` cannot spin (2 < 1 is false).
+
+**Root cause:** `SERCOM::transferDataSPI` spins forever on the RXC flag
+(`SERCOM.cpp:330`). The BLE SPI is SERCOM1 on TinyScreen+ (variant.h
+`PERIPH_SPI = sercom1` — the older "shares SERCOM4" comments were wrong).
+A wedged SERCOM (display/BLE shared bus interleave, module reset
+mid-transaction) or a dead module handshake leaves RXC unset forever →
+silent infinite loop → 16 s watchdog → reboot. That is the whole crash
+family (post-relay-burst stalls and the overnight phone=0 scan-path wedges).
+
+**Fix (both boards flashed, verified):** bounded byte transfer
+`spi_xfer_bounded()` in `arduino_bluenrg_ble.cpp` — direct SERCOM1 register
+access with a 50 ms per-byte bound (~6000x the normal 8 us byte; a 1 ms
+bound was measured too tight and corrupted healthy transactions: notify
+fail 0xFF within seconds — retuned to 50 ms, `spit=0` since). Each timeout
+counts (`spi_xfer_timeouts`, printed as `spit=` in STAT) and breadcrumbs
+(0x71); failures surface through the existing module-wedge detector →
+`module_reinit` (2-3 s, no reboot, demo state preserved) instead of a
+silent 16 s hang + reboot. D1 54,504 B / D2 53,948 B.
+
+**Remaining honest caveat:** the fix converts the crash into fast recovery;
+the underlying trigger (module RF state wedging under phone-app scan-burst
+desense at close range) is environmental — demos keep boards and phones
+physically separated during radio-heavy phases.

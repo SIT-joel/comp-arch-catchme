@@ -56,6 +56,45 @@ extern volatile uint32_t ms_counter;
  * library translation units cannot include sketch headers. */
 extern "C" void cdiag_bc(uint8_t id, uint8_t a, uint16_t b);
 
+/* catch-me (14 Nov): BOUNDED SPI byte transfer. The core's
+ * SERCOM::transferDataSPI spins forever on the RXC flag — a wedged SERCOM
+ * (BLE SPI and the display share the bus; a module reset mid-transaction
+ * also strands the flag) hangs the main loop silently until the watchdog
+ * fires. Crash-dump proof (first natural dump on instrumented firmware):
+ * the last breadcrumb was free_event_list and the freeze was inside the
+ * first BlueNRG_SPI_Write — no write-retry breadcrumb, no post-write
+ * breadcrumb, i.e. the stall was INSIDE SPI.transfer(). Bound each byte
+ * at ~2 ms (a byte at 12 MHz SPI takes ~7 us): on timeout return 0xFF,
+ * count it, and let the app's module-wedge detector (IRQ stuck + no valid
+ * reads for 2 s) re-init the module instead of rebooting. PERIPH_SPI from
+ * variant.h is the same SERCOM instance SPIClass SPI drives. */
+volatile uint32_t spi_xfer_timeouts = 0;
+
+static uint8_t spi_xfer_bounded(uint8_t tx) {
+  /* variant.h binds SPIClass SPI to PERIPH_SPI = sercom1, which wraps the
+   * CMSIS instance SERCOM1 — they correspond by construction. */
+  SercomSpi *spi = &(SERCOM1->SPI);
+  if (spi->INTFLAG.bit.RXC) {
+    (void)spi->DATA.bit.DATA;  // drain a stale byte from an aborted transfer
+  }
+  spi->DATA.bit.DATA = tx;
+  /* 50 ms bound: a byte is ~8 us at the configured clock, and legitimate
+   * slow cases (module busy with radio events, display/BLE bus interleave)
+   * complete within a few ms — measured: a 1 ms bound corrupted healthy
+   * transactions (notify fail 0xFF within seconds). 50 ms keeps the bound
+   * ~6000x the normal byte time while still converting a hard wedge into
+   * a fast failure. */
+  uint32_t start = HAL_GetTick();
+  while (spi->INTFLAG.bit.RXC == 0) {
+    if (HAL_GetTick() - start >= 50) {
+      spi_xfer_timeouts++;
+      cdiag_bc(0x71, 0, (uint16_t)(spi_xfer_timeouts & 0xFFFF));
+      return 0xFF;
+    }
+  }
+  return (uint8_t)spi->DATA.bit.DATA;
+}
+
 /** @addtogroup BSP
  *  @{
  */
@@ -450,7 +489,7 @@ void HAL_SPI_TransmitReceive_Opt(const uint8_t *pTxData, uint8_t *pRxData, uint8
 {
   uint8_t i;
   for (i = 0; i < Size; i++) {
-    *pRxData++ = BLESPI->transfer(*pTxData++);
+    *pRxData++ = spi_xfer_bounded(*pTxData++);
   }
 }
 
@@ -465,9 +504,9 @@ void HAL_SPI_TransmitReceive_Opt(const uint8_t *pTxData, uint8_t *pRxData, uint8
 void HAL_SPI_Transmit_Opt(const uint8_t *pTxData, uint8_t Size)
 {
   uint8_t i;
-  
+
   for (i = 0; i < Size; i++) {
-    BLESPI->transfer(*pTxData++);
+    (void)spi_xfer_bounded(*pTxData++);
   }
 }
 
@@ -482,9 +521,9 @@ void HAL_SPI_Transmit_Opt(const uint8_t *pTxData, uint8_t Size)
 void HAL_SPI_Receive_Opt(uint8_t *pRxData, uint8_t Size)
 {
   uint8_t i;
-  
+
   for (i = 0; i < Size; i++) {
-    *pRxData++ = BLESPI->transfer(0xFF);
+    *pRxData++ = spi_xfer_bounded(0xFF);
   }
 }
 

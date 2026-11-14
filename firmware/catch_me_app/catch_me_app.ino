@@ -31,6 +31,11 @@
 
 #define SerialLog SerialUSB
 
+// Bounded-SPI timeout counter (arduino_bluenrg_ble.cpp): each increment is
+// a wedged-SERCOM byte transfer that USED to hang the loop until the WDT
+// fired — now it fails fast and the module-wedge detector re-inits.
+extern volatile uint32_t spi_xfer_timeouts;
+
 char g_boot_id[16] = "d?-0";
 uint32_t g_record_sequence = 0;
 
@@ -522,6 +527,8 @@ void loop() {
     SerialLog.print(g_ble.adverts_received());
     SerialLog.print(" vbad=");
     SerialLog.print(hci_verify_bads);
+    SerialLog.print(" spit=");
+    SerialLog.print(spi_xfer_timeouts);
     SerialLog.print(" phone=");
     SerialLog.print(g_ble.phoneConnected());
     SerialLog.print(" peers=");
