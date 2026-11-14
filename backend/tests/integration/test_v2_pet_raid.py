@@ -123,175 +123,29 @@ def _push_fix(clients, device_id, seq, landmark, *, age_s=2.0):
     record["gps"]["source"] = "phone"
     record["captured_at"] = _iso(captured)
     r = post_batch(clients["a"] if device_id == clients["a_device"] else clients["b"], device_id, [record])
-    assert r.status_code == 200, r.text
+
+# (The raid quest was removed 14 Nov by user decision: the board-to-board
+# sustained link drops at 23-30 s - a hardware wall documented across every
+# configuration since 12 Nov. Raid creation is rejected as an unknown quest;
+# historical raid sessions stay readable. The quest set is together,
+# explore, quiz.)
 
 
-def start_raid(clients, landmark):
-    created = clients["a"].post(
-        "/api/v1/sessions",
-        json={"quest_id": "raid", "demo": True, "landmark_id": landmark["id"]},
-    )
-    return created
-
-
-def test_raid_create_requires_landmark(clients):
+def test_raid_creation_is_rejected(clients):
     missing = clients["a"].post("/api/v1/sessions", json={"quest_id": "raid", "demo": True})
     assert missing.status_code == 422
-    bogus = clients["a"].post(
-        "/api/v1/sessions", json={"quest_id": "raid", "demo": True, "landmark_id": "nope"}
+    with_landmark = clients["a"].post(
+        "/api/v1/sessions", json={"quest_id": "raid", "demo": True, "landmark_id": "landmark_a"}
     )
-    assert bogus.status_code == 404
-    stray = clients["a"].post(
-        "/api/v1/sessions", json={"quest_id": "together", "demo": True, "landmark_id": "landmark_a"}
-    )
-    assert stray.status_code == 422
+    assert with_landmark.status_code == 422
+    body = missing.json()
+    assert body["error"]["code"] == "invalid_quest"
 
 
-def test_raid_gate_blocks_without_fixes(clients):
-    landmark = _landmark(clients)
-    created = start_raid(clients, landmark)
+def test_together_creation_still_works_after_raid_removal(clients):
+    created = clients["a"].post("/api/v1/sessions", json={"quest_id": "together", "demo": True})
     assert created.status_code == 201, created.text
-    session = created.json()
-    assert session["landmark"]["id"] == landmark["id"]
-
-    blocked = clients["b"].post(f"/api/v1/sessions/{session['id']}/accept")
-    assert blocked.status_code == 409
-    assert blocked.json()["error"]["code"] == "raid_gate_location"
-    cleanup = clients["a"].post(f"/api/v1/sessions/{session['id']}/cancel")
+    assert created.json()["quest_id"] == "together"
+    session_id = created.json()["id"]
+    cleanup = clients["a"].post(f"/api/v1/sessions/{session_id}/cancel")
     assert cleanup.status_code == 200
-
-
-def _activate_and_backdate(clients, session_id, seconds: int = 120):
-    """Accept + simulate that the fight window already elapsed: activation is
-    backdated so fabricated fight times fit inside [activated_at, now]."""
-    from datetime import datetime, timedelta, timezone as tz
-
-    from app.db import SessionLocal
-    from app.models import QuestSession
-
-    accepted = clients["b"].post(f"/api/v1/sessions/{session_id}/accept")
-    assert accepted.status_code == 200, accepted.text
-    db = SessionLocal()
-    try:
-        row = db.get(QuestSession, uuid.UUID(session_id))
-        row.activated_at = datetime.now(tz.utc) - timedelta(seconds=seconds)
-        db.commit()
-    finally:
-        db.close()
-    return accepted.json()
-
-
-def test_raid_full_win_awards_once(clients):
-    landmark = _landmark(clients)
-    created = start_raid(clients, landmark)
-    session = created.json()
-    _push_fix(clients, clients["a_device"], 1, landmark)
-    _push_fix(clients, clients["b_device"], 1, landmark)
-    _activate_and_backdate(clients, session["id"])
-    sid = session["id"]
-
-    now = datetime.now(timezone.utc)
-    first = clients["a"].post(
-        f"/api/v1/sessions/{sid}/raid/outcome",
-        json={
-            "outcome": "win",
-            "fight_started_at": _iso(now - timedelta(seconds=90)),
-            "fight_ended_at": _iso(now - timedelta(seconds=10)),
-            "command_id": str(uuid.uuid4()),
-        },
-    )
-    assert first.status_code == 200, first.text
-    assert first.json()["state"] == "active"  # one report is not enough
-    assert first.json()["raid_outcome"] == "win"
-
-    xp_before = {
-        clients["a"].get("/api/v1/me").json()["user"]["lifetime_xp"],
-    }
-    second = clients["b"].post(
-        f"/api/v1/sessions/{sid}/raid/outcome",
-        json={
-            "outcome": "win",
-            "fight_started_at": _iso(now - timedelta(seconds=85)),
-            "fight_ended_at": _iso(now - timedelta(seconds=12)),
-            "command_id": str(uuid.uuid4()),
-        },
-    )
-    assert second.status_code == 200, second.text
-    final = second.json()
-    assert final["state"] == "completed"
-
-    me_a = clients["a"].get("/api/v1/me").json()
-    me_b = clients["b"].get("/api/v1/me").json()
-    assert me_a["user"]["lifetime_xp"] == 100 and me_a["user"]["points"] == 100
-    assert me_b["user"]["lifetime_xp"] == 100 and me_b["user"]["points"] == 100
-
-    replay = clients["a"].post(
-        f"/api/v1/sessions/{sid}/raid/outcome",
-        json={
-            "outcome": "win",
-            "fight_started_at": _iso(now - timedelta(seconds=90)),
-            "fight_ended_at": _iso(now - timedelta(seconds=10)),
-            "command_id": str(uuid.uuid4()),
-        },
-    )
-    assert replay.status_code == 409  # one report per reporter
-    assert clients["a"].get("/api/v1/me").json()["user"]["lifetime_xp"] == 100
-
-
-def test_raid_loss_completes_without_award(clients):
-    landmark = _landmark(clients)
-    created = start_raid(clients, landmark)
-    session = created.json()
-    _push_fix(clients, clients["a_device"], 1, landmark)
-    _push_fix(clients, clients["b_device"], 1, landmark)
-    _activate_and_backdate(clients, session["id"])
-    sid = session["id"]
-
-    now = datetime.now(timezone.utc)
-    clients["a"].post(
-        f"/api/v1/sessions/{sid}/raid/outcome",
-        json={
-            "outcome": "win",
-            "fight_started_at": _iso(now - timedelta(seconds=60)),
-            "fight_ended_at": _iso(now - timedelta(seconds=5)),
-            "command_id": str(uuid.uuid4()),
-        },
-    )
-    lost = clients["b"].post(
-        f"/api/v1/sessions/{sid}/raid/outcome",
-        json={
-            "outcome": "lose",
-            "fight_started_at": _iso(now - timedelta(seconds=60)),
-            "fight_ended_at": _iso(now - timedelta(seconds=5)),
-            "command_id": str(uuid.uuid4()),
-        },
-    )
-    assert lost.status_code == 200
-    assert lost.json()["state"] == "completed"
-    me_a = clients["a"].get("/api/v1/me").json()
-    me_b = clients["b"].get("/api/v1/me").json()
-    # A shared loss completes the session but pays nobody.
-    assert me_a["user"]["lifetime_xp"] == 0 and me_b["user"]["lifetime_xp"] == 0
-
-
-def test_raid_outcome_requires_participant(clients):
-    landmark = _landmark(clients)
-    created = start_raid(clients, landmark)
-    session = created.json()
-    _push_fix(clients, clients["a_device"], 1, landmark)
-    _push_fix(clients, clients["b_device"], 1, landmark)
-    assert clients["b"].post(f"/api/v1/sessions/{session['id']}/accept").status_code == 200
-    now = datetime.now(timezone.utc)
-    # Unauthenticated call must be rejected before any state change.
-    unauth = clients["a"].post(
-        f"/api/v1/sessions/{session['id']}/raid/outcome",
-        json={
-            "outcome": "win",
-            "fight_started_at": _iso(now),
-            "fight_ended_at": _iso(now),
-            "command_id": str(uuid.uuid4()),
-        },
-        headers={"Authorization": ""},
-    )
-    assert unauth.status_code in (401, 403, 422)
-    clients["a"].post(f"/api/v1/sessions/{session['id']}/cancel")
