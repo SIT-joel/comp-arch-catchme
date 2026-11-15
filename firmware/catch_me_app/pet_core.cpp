@@ -391,6 +391,18 @@ void PetCore::game_move(int8_t dir) {
   note_activity();
 }
 
+void PetCore::game_move_tilt(int8_t x) {
+  // Tilt control (15 Nov): the accelerometer's calibrated tilt maps the
+  // basket position directly — hold the board facing you and tilt. The
+  // buttons still work (the UI feeds whichever input arrived last).
+  if (!game_active_) return;
+  int32_t bx = 44 + (int32_t)x * 42 / 100;
+  if (bx < 2) bx = 2;
+  if (bx > 86) bx = 86;
+  game_basket_x_ = (uint8_t)bx;
+  note_activity();
+}
+
 void PetCore::game_quit() { game_finish(); }
 
 uint8_t PetCore::game_snacks(int8_t* sx, int8_t* sy, uint8_t max) const {

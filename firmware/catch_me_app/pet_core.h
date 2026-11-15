@@ -73,6 +73,7 @@ class PetCore {
   bool game_active() const { return game_active_; }
   const char* game_start();      // NULL = started; else refusal message
   void game_move(int8_t dir);    // -1 left / +1 right (button edge)
+  void game_move_tilt(int8_t x); // absolute basket position (tilt control)
   void game_quit();
   uint8_t game_caught() const { return game_caught_; }
   uint8_t game_missed() const { return game_missed_; }

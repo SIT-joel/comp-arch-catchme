@@ -19,6 +19,7 @@
 #include "crash_diag.h"
 #include "flash_queue.h"
 #include "game_app.h"
+#include "imu_app.h"
 #include "gps_app.h"
 #include "internal_queue.h"
 #include "pet_core.h"
@@ -292,6 +293,12 @@ void setup() {
   g_ble.gate_start();
 #endif
 
+  // Accelerometer: probe the I2C stack for the BMA25x/BMX055 (the ASD2511
+  // shield) and calibrate the neutral tilt — the pet mini-game steers by
+  // tilt when present; buttons remain the fallback. BEFORE the watchdog:
+  // the calibration's ~350 ms of I2C reads must not race the 16 s window.
+  g_imu.begin();
+
   // Watchdog LAST: everything above (including the bounded 60 s serial
   // wait) must complete before the 16 s window applies.
   wdt::begin();
@@ -321,6 +328,7 @@ void loop() {
   g_ui.tick_quiz();  // quiz answer retransmit until phone ack
   g_petcore.tick();
   g_game.tick();
+  g_imu.tick();  // accelerometer tilt (pet mini-game steering, 15 Nov)
 
   // Bench triggers (newline-terminated lines): "RAID" starts the raid fight;
   // "QANS <choice 0-3>" answers the current quiz question from this board
