@@ -98,6 +98,19 @@ def accept_invitation(
 
     partnership = service.accept_invitation(db, invitation, user)
     version = bump_state_version(db)
+    from app.models import PartnershipMember, User
+    from app.services.achievements import check_and_unlock
+
+    # Achievements: "New Friend" unlocks when the partnership forms (both
+    # partners evaluated in the same transaction).
+    member_ids = [
+        m.user_id
+        for m in db.query(PartnershipMember)
+        .filter(PartnershipMember.partnership_id == partnership.id)
+        .all()
+    ]
+    for member_user in db.query(User).filter(User.id.in_(member_ids)).all():
+        check_and_unlock(db, member_user)
     db.commit()
     publish_state_event(
         [invitation.from_user_id, invitation.to_user_id], version,

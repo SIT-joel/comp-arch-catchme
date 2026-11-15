@@ -70,10 +70,11 @@ def create_app() -> FastAPI:
     app.include_router(rewards.router)
     app.include_router(discovery.router)
     app.include_router(partnerships.router)
-    from app.routers import pets, quiz
+    from app.routers import achievements, pets, quiz
 
     app.include_router(pets.router)
     app.include_router(quiz.router)
+    app.include_router(achievements.router)
 
     return app
 

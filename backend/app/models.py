@@ -649,3 +649,21 @@ class RaidOutcome(Base):
     fight_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fight_ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserAchievement(Base):
+    """One unlocked achievement per user. The catalog lives in code
+    (app/services/achievements.py); rows are created idempotently the first
+    time a condition is met (unique per user + achievement)."""
+
+    __tablename__ = "user_achievements"
+    __table_args__ = (
+        UniqueConstraint("user_id", "achievement_id", name="uq_achievement_once"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    achievement_id: Mapped[str] = mapped_column(String(length=40), nullable=False)
+    unlocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

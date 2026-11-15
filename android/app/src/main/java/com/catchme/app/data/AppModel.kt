@@ -62,9 +62,23 @@ class AppModel(private val context: Context, baseUrl: String) {
         val gpsFix: GpsFixView? = null,
         val raidFight: Boolean = false,  // wearable is fighting; phone link paused
         val quiz: QuizView? = null,  // v2 quiz: active 'Know Your Partner' state
+        // --- achievements (15 Nov): the catalog + this user's unlocks ---
+        val achievements: List<AccView> = emptyList(),
+        val newAchievement: String? = null,  // latest unlock name (banner)
+        val newAchievementAt: Long = 0,  // ms epoch of the banner appearance
     )
 
     data class LandmarkOpt(val id: String, val name: String)
+
+    /** One achievement row for the achievements card (unlocked=false rows
+     *  render greyed with their description as the "how to earn" hint). */
+    data class AccView(
+        val id: String,
+        val name: String,
+        val description: String,
+        val unlocked: Boolean,
+        val unlockedAt: String?,
+    )
 
     /** v2 quiz: the phone renders the question; the wearable is the A-D pad. */
     data class QuizView(
@@ -772,6 +786,7 @@ class AppModel(private val context: Context, baseUrl: String) {
             } catch (e: Exception) {
                 android.util.Log.w("AppModel", "pet fetch failed: ${e.message}")
             }
+            refreshAchievements()
             try {
                 val arr = api.landmarks()
                 val opts = (0 until arr.length()).mapNotNull { i ->
@@ -789,6 +804,40 @@ class AppModel(private val context: Context, baseUrl: String) {
     // LocationManager fix stamped onto relayed telemetry with its TRUE age.
     private var gpsListener: android.location.LocationListener? = null
     private var lastGpsReRegisterMs = 0L
+
+    /** Achievements (15 Nov): fetch the catalog + this user's unlocks and
+     *  diff against the previous fetch — any NEW unlock surfaces as a
+     *  banner (newAchievement/newAchievementAt) for the main screen. */
+    fun refreshAchievements() {
+        scope.launch {
+            try {
+                val arr = api.achievements().getJSONArray("achievements")
+                val opts = (0 until arr.length()).mapNotNull { i ->
+                    val item = arr.optJSONObject(i) ?: return@mapNotNull null
+                    AccView(
+                        id = item.optString("id"),
+                        name = item.optString("name"),
+                        description = item.optString("description"),
+                        unlocked = item.optBoolean("unlocked"),
+                        unlockedAt = item.optString("unlocked_at").takeIf { it != "null" },
+                    )
+                }
+                val prevUnlocked = _ui.value.achievements
+                    .filter { it.unlocked }.map { it.id }.toSet()
+                _ui.value = _ui.value.copy(achievements = opts)
+                val newest = opts.filter { it.unlocked }
+                    .maxByOrNull { it.unlockedAt ?: "" }
+                if (newest != null && newest.id !in prevUnlocked) {
+                    _ui.value = _ui.value.copy(
+                        newAchievement = newest.name,
+                        newAchievementAt = System.currentTimeMillis(),
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("AppModel", "achievements fetch failed: ${e.message}")
+            }
+        }
+    }
 
     /** Re-register the location listeners WITHOUT dropping the fix. Verified
      * live (14 Nov): both Samsungs (S21+ One UI, S24 FE Android 16) PERMANENTLY

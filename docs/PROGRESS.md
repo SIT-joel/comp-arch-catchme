@@ -2523,3 +2523,39 @@ the raid state code in ble_app/game_app stays compiled but unreachable
 (Know Your Partner, both wearables' A-D pads) -> leveling + pet care ->
 reward shop. XP visibility: the reward banner on the boards, the live pet
 cards on the phones, the web dashboard.
+
+## ACHIEVEMENT SYSTEM — 15 Nov (friend-journey milestones)
+
+**User request:** an achievement system focused on making friends. Built as
+server-evaluated milestones over data the backend already stores — no new
+hardware, no new evidence rules, no wearable changes.
+
+**Catalog (10, in code — app/services/achievements.py):** New Friend (first
+partnership), First Meeting (together x1), Regulars (together x3), Explorer
+(explore x1), Icebreaker (quiz x1), Mind Reader (a quiz where EVERY answer
+is correct — server-scored), Caring Friend (care streak 3), Rising Star
+(level 5), Social Legend (level 10), Saver (200 points held).
+
+**Mechanics:** unlocks are idempotent rows in user_achievements (unique per
+user + achievement) evaluated at the natural trigger points — quest
+completion (evaluation.py), pet care (pets.py), partnership acceptance
+(partnerships.py) — inside those transactions. GET /api/v1/achievements
+returns the catalog + unlock state; a partner-view route
+(/achievements/{user_id}) serves the active partner only.
+
+**Deployed:** the migration (c8e2a4b6d9f1) ran on the dev DB; the API
+container rebuilt — the endpoint is LIVE through the tunnel (verified with
+miya's token: the catalog returns, unlocks evaluate lazily at each user's
+next trigger). Tests: 87/87 (5 achievement tests: the route, the care
+trigger, the care-streak unlock, the idempotency, the partner route).
+
+**Phone:** the Achievements card (unlocked count, primary-colored names,
+locked rows greyed with the earn hint) + the unlock banner (the newest
+unlock shows for 8 s). The APK is built; the phone installs are pending
+(both phones dropped off adb overnight — reinstall from
+android/app/build/outputs/apk/debug/app-debug.apk or re-enable wireless
+debugging).
+
+**Demo value:** every quest/care action now pops a visible achievement
+banner on the phone — the friend-journey rewards stack on top of the XP
+banner already proven on the boards.

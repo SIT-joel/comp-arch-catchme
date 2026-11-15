@@ -145,6 +145,9 @@ def pet_care(
         )
     )
     version = bump_state_version(db)
+    from app.services.achievements import check_and_unlock
+
+    check_and_unlock(db, user)  # care-streak achievements
     db.commit()
     partner_id = _partner_id(db, user.id)
     publish_state_event(
