@@ -2559,3 +2559,11 @@ debugging).
 **Demo value:** every quest/care action now pops a visible achievement
 banner on the phone — the friend-journey rewards stack on top of the XP
 banner already proven on the boards.
+
+**Tilt verification (15 Nov, later):** the tilt control is live on both
+boards. The boards boot with "imu: accelerometer ready at 0x18 / calibrated
+neutral" and the phone links re-establish normally (no I2C/SPI conflicts).
+To play: open the pet (or CARE) -> tap through to Snack Catch -> tilt the
+board left/right and the basket follows; LL/LR buttons still work. The
+calibration re-captures the neutral at every app boot, so the board can be
+held at any angle before starting the game.
