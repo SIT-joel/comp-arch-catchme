@@ -167,7 +167,10 @@ void UiApp::tick() {
     }
     if (pressed & TSButtonLowerRight) g_petcore.pet_stroke();
     if (pressed & TSButtonUpperRight) {
-      if (g_petcore.game_start() == nullptr) game_view_ = true;
+      if (g_petcore.game_start() == nullptr) {
+        g_imu.rezero();  // neutral = how the board is held right now
+        game_view_ = true;
+      }
     }
     // UL falls through to global navigation below.
   }

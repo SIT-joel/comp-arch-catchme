@@ -370,7 +370,7 @@ const char* PetCore::game_start() {
   game_active_ = true;
   game_caught_ = 0;
   game_missed_ = 0;
-  game_basket_x_ = 42;
+  game_basket_x_ = 47;  // center of the on-screen clamp range 6..89
   for (uint8_t k = 0; k < 3; k++) {
     snack_x_[k] = -1;
     snack_y_[k] = 0;
@@ -385,9 +385,15 @@ const char* PetCore::game_start() {
 
 void PetCore::game_move(int8_t dir) {
   if (!game_active_) return;
-  game_basket_x_ += dir * 6;
-  if (game_basket_x_ < 2) game_basket_x_ = 2;
-  if (game_basket_x_ > 86) game_basket_x_ = 86;
+  // Clamp range 6..89 keeps the whole 13 px basket sprite on the 96 px
+  // screen (drawRect(bx - 6, .., 13, ..) spans bx-6 .. bx+6); the old 2
+  // clamp drew from x = -4 and the basket vanished at the left edge.
+  // Arithmetic in int: the old uint8_t wrap (2 - 6 = 252) jumped the
+  // basket to the right edge instead of stepping left.
+  int32_t bx = (int32_t)game_basket_x_ + dir * 6;
+  if (bx < 6) bx = 6;
+  if (bx > 89) bx = 89;
+  game_basket_x_ = (uint8_t)bx;
   note_activity();
 }
 
@@ -396,9 +402,9 @@ void PetCore::game_move_tilt(int8_t x) {
   // basket position directly — hold the board facing you and tilt. The
   // buttons still work (the UI feeds whichever input arrived last).
   if (!game_active_) return;
-  int32_t bx = 44 + (int32_t)x * 42 / 100;
-  if (bx < 2) bx = 2;
-  if (bx > 86) bx = 86;
+  int32_t bx = 47 + (int32_t)x * 42 / 100;
+  if (bx < 6) bx = 6;
+  if (bx > 89) bx = 89;
   game_basket_x_ = (uint8_t)bx;
   note_activity();
 }

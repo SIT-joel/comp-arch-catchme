@@ -23,6 +23,10 @@ class ImuApp {
   // True while the tilt exceeds the activation threshold (the user is
   // actively steering) — callers use it to arbitrate with the buttons.
   bool tilt_active() const { return tilt_active_; }
+  // Instant neutral capture from the smoothed value: call when the game
+  // starts so the CURRENT hold angle is neutral (boot-time neutral does
+  // not match how the board is held during play).
+  void rezero();
 
  private:
   bool probe();
