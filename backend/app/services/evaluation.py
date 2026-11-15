@@ -205,6 +205,11 @@ def evaluate_and_maybe_complete(db: Session, quest_session: QuestSession) -> Que
                     session_id=locked.id,
                 )
             )
+            # Achievements: levels/quests unlock milestones right after the
+            # award lands (same transaction; idempotent rows).
+            from app.services.achievements import check_and_unlock
+
+            check_and_unlock(db, user)
 
     db.flush()
     return locked

@@ -85,6 +85,7 @@ class Api(private val baseUrl: String) {
 
     // --- v2 pet + landmarks ---
     fun landmarks(): JSONArray = call("GET", "/api/v1/landmarks").getJSONArray("landmarks")
+    fun achievements(): JSONObject = call("GET", "/api/v1/achievements")
     fun pet(): JSONObject = call("GET", "/api/v1/me/pet")
     fun putPet(species: String, name: String): JSONObject =
         call("PUT", "/api/v1/me/pet", JSONObject().put("species", species).put("name", name))

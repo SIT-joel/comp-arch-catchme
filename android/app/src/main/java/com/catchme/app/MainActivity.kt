@@ -206,6 +206,24 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
             QuizCard(model, ui.quiz)
         }
 
+        // Achievement unlock banner (15 Nov): the newest unlock shows for a
+        // few seconds before the card takes over — the friend-journey reward.
+        ui.newAchievement?.let { name ->
+            val age = System.currentTimeMillis() - ui.newAchievementAt
+            if (age < 8000) {
+                Card {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Achievement unlocked!", style = MaterialTheme.typography.titleMedium)
+                        Text(name, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
+        if (ui.achievements.isNotEmpty()) {
+            AchievementsCard(ui.achievements)
+        }
+
         DiscoveryCard(model, ui)
 
         // v2: pet mirror card (species/name live on the wearable; level/XP server-owned).
@@ -252,6 +270,37 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                 // were removed 14 Nov: the raid quest was cut — the
                 // board-to-board sustained link drops at 23-30 s, a hardware
                 // wall. The quest set is together, explore, quiz.)
+            }
+        }
+    }
+}
+
+/** Achievements card (15 Nov): the friend-journey milestones. Unlocked rows
+ *  show their name in the primary color; locked rows render greyed with the
+ *  description as the "how to earn it" hint. */
+@Composable
+fun AchievementsCard(items: List<AppModel.AccView>) {
+    Card {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Achievements",
+                 style = MaterialTheme.typography.titleMedium)
+            val unlockedCount = items.count { it.unlocked }
+            Text("$unlockedCount of ${items.size} unlocked",
+                 style = MaterialTheme.typography.bodySmall)
+            items.forEach { item ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text(
+                            item.name,
+                            color = if (item.unlocked) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        )
+                        Text(item.description,
+                             style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(if (item.unlocked) "✓" else "",
+                         color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }
