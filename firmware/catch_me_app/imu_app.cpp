@@ -17,6 +17,10 @@ const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
 const int32_t kTiltScale = 1000;                 // delta for full deflection
 const int32_t kTiltDeadzone = 100;               // dead zone (hand jitter)
 const int32_t kTiltActiveMin = 250;              // |delta| for "actively steering"
+// On this board/shield mounting the X reading RISES as the board tilts
+// left, so without the flip the basket ran the wrong way (user feedback
+// 15 Nov). Set +1 if a future board mounts the shield rotated.
+const int32_t kTiltSign = -1;
 
 bool i2cPresent(uint8_t addr) {
   Wire.beginTransmission(addr);
@@ -136,7 +140,7 @@ void ImuApp::tick() {
   if (delta > kTiltDeadzone) delta -= kTiltDeadzone;
   else if (delta < -kTiltDeadzone) delta += kTiltDeadzone;
   else delta = 0;
-  int32_t scaled = (delta * 100) / kTiltScale;
+  int32_t scaled = kTiltSign * ((delta * 100) / kTiltScale);
   if (scaled > 100) scaled = 100;
   if (scaled < -100) scaled = -100;
   tilt_ = (int8_t)scaled;
