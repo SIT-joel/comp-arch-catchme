@@ -9,9 +9,14 @@
 namespace {
 
 const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
-const int32_t kTiltScale = 500;                  // mg delta for full deflection
-const int32_t kTiltDeadzone = 40;                // mg dead zone (hand jitter)
-const int32_t kTiltActiveMin = 120;              // |delta| for "actively steering"
+// Sensitivity retune (15 Nov, user feedback): 1 g ~= 1024 counts on this
+// chip, so ~30 degrees of tilt was already full deflection at the old
+// scale of 500. 1000 counts means a comfortable wrist arc (about +-50
+// degrees) sweeps most of the playfield without twitching. The dead zone
+// and steering threshold scale up with it.
+const int32_t kTiltScale = 1000;                 // delta for full deflection
+const int32_t kTiltDeadzone = 100;               // dead zone (hand jitter)
+const int32_t kTiltActiveMin = 250;              // |delta| for "actively steering"
 
 bool i2cPresent(uint8_t addr) {
   Wire.beginTransmission(addr);
@@ -93,6 +98,20 @@ void ImuApp::calibrate() {
   SerialLog.print(neutral_x_);
   SerialLog.print(" y=");
   SerialLog.println(neutral_y_);
+}
+
+void ImuApp::rezero() {
+  // Instant neutral capture from the smoothed value (no blocking reads).
+  // Called when Snack Catch starts: the boot-time neutral reflects however
+  // the board happened to sit at power-on, but the player holds it very
+  // differently — without this the first small tilt reads as a huge delta
+  // and pins the basket at the clamp edge (reported 15 Nov).
+  if (!available_ || !calibrated_) return;
+  neutral_x_ = smooth_x_ / 256;
+  tilt_ = 0;
+  tilt_active_ = false;
+  SerialLog.print("imu: rezero neutral x=");
+  SerialLog.println(neutral_x_);
 }
 
 bool ImuApp::readAcc(int16_t &x, int16_t &y, int16_t &z) {

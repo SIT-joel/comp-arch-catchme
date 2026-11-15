@@ -2567,3 +2567,22 @@ To play: open the pet (or CARE) -> tap through to Snack Catch -> tilt the
 board left/right and the basket follows; LL/LR buttons still work. The
 calibration re-captures the neutral at every app boot, so the board can be
 held at any angle before starting the game.
+
+**Tilt retune after first play (15 Nov, later still):** user feedback —
+"too sensitive, and the basket vanishes when moving". Three root causes
+fixed and reflashed to both boards (COM3 = D1, COM7 = D2, boot verified):
+1. Boot-time neutral did not match the play hold angle (one board booted
+   standing on edge, x ~= 1 g; the other nearly flat), so the first small
+   tilt read as a huge delta and pinned the basket at the clamp edge.
+   `ImuApp::rezero()` now captures the CURRENT smoothed hold angle as
+   neutral the instant the game starts (no blocking reads).
+2. Sensitivity: full deflection was ~28 degrees of tilt (scale 500 counts,
+   ~1024 counts/g). Retuned: scale 1000 (full sweep needs ~50-60
+   degrees), dead zone 100 counts (was 40), steering threshold 250
+   (was 120) — small wrist corrections no longer slam the basket.
+3. Basket vanish: the clamp range 2..86 let `drawRect(bx - 6, ..)` draw
+   from x = -4 (off-window -> invisible at the left edge); `game_move`
+   also wrapped on uint8_t underflow (2 - 6 = 252) jumping the basket to
+   the right edge. The clamp is now 6..89 (whole 13 px sprite on the 96 px
+   screen) with the arithmetic done in int; the center start is 47.
+
