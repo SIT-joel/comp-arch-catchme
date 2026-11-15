@@ -1,4 +1,5 @@
 #include "ui_app.h"
+#include "imu_app.h"
 
 #include "config.h"
 #include "queue_sel.h"
@@ -121,9 +122,14 @@ void UiApp::tick() {
   // rotation is PET / CARE / NEAR; the quiz and PIN takeovers unchanged.
 
   // Snack Catch mini-game view (launched from PET or CARE): owns the lower
-  // buttons; UL exits.
+  // buttons; UL exits. Tilt control (15 Nov): when the accelerometer is
+  // present and actively steering, the basket follows the tilt directly —
+  // much easier than button mashing; the buttons still work as before.
   if ((screen_ == SCR_PET || screen_ == SCR_CARE) &&
       (g_petcore.game_active() || game_view_)) {
+    if (g_imu.available() && g_imu.tilt_active()) {
+      g_petcore.game_move_tilt(g_imu.tilt());
+    }
     if (pressed & TSButtonLowerLeft) g_petcore.game_move(-1);
     if (pressed & TSButtonLowerRight) g_petcore.game_move(1);
     if (pressed & TSButtonUpperLeft) {
