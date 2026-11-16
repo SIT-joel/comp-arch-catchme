@@ -9,14 +9,15 @@
 namespace {
 
 const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
-// Sensitivity retune (15 Nov, user feedback): 1 g ~= 1024 counts on this
-// chip, so ~30 degrees of tilt was already full deflection at the old
-// scale of 500. 1000 counts means a comfortable wrist arc (about +-50
-// degrees) sweeps most of the playfield without twitching. The dead zone
-// and steering threshold scale up with it.
-const int32_t kTiltScale = 1000;                 // delta for full deflection
-const int32_t kTiltDeadzone = 100;               // dead zone (hand jitter)
-const int32_t kTiltActiveMin = 250;              // |delta| for "actively steering"
+// Sensitivity retune (16 Nov, user feedback): the 16 Nov morning values
+// (scale 1000, dead zone 100, active 250) made the basket feel dead —
+// the original "too sensitive" complaint was the missing re-zero pinning
+// the basket, not the curve itself, so the middle ground sits much
+// closer to the original: full sweep at ~35 degrees of tilt, ~8 px of
+// basket travel per 10 degrees.
+const int32_t kTiltScale = 600;                  // delta for full deflection
+const int32_t kTiltDeadzone = 60;                // dead zone (hand jitter)
+const int32_t kTiltActiveMin = 140;              // |delta| for "actively steering"
 // On this board/shield mounting the X reading RISES as the board tilts
 // left, so without the flip the basket ran the wrong way (user feedback
 // 15 Nov). Set +1 if a future board mounts the shield rotated.
@@ -134,8 +135,10 @@ void ImuApp::tick() {
   last_read_ms_ = now;
   int16_t x, y, z;
   if (!readAcc(x, y, z)) return;
-  // EMA smoothing (alpha ~= 0.25 at 20 Hz) for a steady basket.
-  smooth_x_ = (smooth_x_ * 3 + (int32_t)x * 256) / 4;
+  // EMA smoothing (alpha ~= 0.31 at 20 Hz) for a steady basket; the dead
+  // zone absorbs the jitter this lets through, and the shorter lag keeps
+  // the basket feeling attached to the hand.
+  smooth_x_ = (smooth_x_ * 7 + (int32_t)x * 256) / 8;
   int32_t delta = (smooth_x_ / 256) - neutral_x_;
   if (delta > kTiltDeadzone) delta -= kTiltDeadzone;
   else if (delta < -kTiltDeadzone) delta += kTiltDeadzone;
