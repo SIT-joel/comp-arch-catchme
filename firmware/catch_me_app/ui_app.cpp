@@ -130,6 +130,11 @@ void UiApp::tick() {
     if (g_imu.available() && g_imu.tilt_active()) {
       g_petcore.game_move_tilt(g_imu.tilt());
     }
+    static uint32_t imu_dbg_ms = 0;  // 1 Hz tilt trace while playing
+    if (g_imu.available() && millis() - imu_dbg_ms >= 1000) {
+      imu_dbg_ms = millis();
+      g_imu.debug_print();
+    }
     if (pressed & TSButtonLowerLeft) g_petcore.game_move(-1);
     if (pressed & TSButtonLowerRight) g_petcore.game_move(1);
     if (pressed & TSButtonUpperLeft) {

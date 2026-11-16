@@ -89,9 +89,10 @@ void setup() {
 static int16_t accAxis(uint8_t msbReg) {
   uint8_t b[2];
   if (!accReadRegs(msbReg, b, 2)) return 0;
-  int16_t v = (int16_t)(((b[1] & 0x0F) << 8) | b[0]);  // 12-bit
-  if (v & 0x0800) v -= 0x1000;                        // sign-extend
-  return (int16_t)(v * 4);                            // +-16g: 1 LSB = 15.6 mg
+  // 12-bit signed: MSB reg = bits 11:4, LSB reg high nibble = bits 3:0.
+  int32_t v = ((int32_t)b[1] << 4) | (b[0] >> 4);
+  if (v & 0x0800) v -= 0x1000;  // sign-extend
+  return (int16_t)(v * 391 / 100);  // 3.91 mg/LSB -> milli-g
 }
 
 void loop() {
@@ -99,19 +100,19 @@ void loop() {
   // Burst 0x02..0x07: X LSB/MSB, Y LSB/MSB, Z LSB/MSB.
   uint8_t d[6];
   if (accReadRegs(0x02, d, 6)) {
-    int16_t x = (int16_t)(((d[1] & 0x0F) << 8) | d[0]);
-    int16_t y = (int16_t)(((d[3] & 0x0F) << 8) | d[2]);
-    int16_t z = (int16_t)(((d[5] & 0x0F) << 8) | d[4]);
-    if (x & 0x0800) x -= 0x1000;
-    if (y & 0x0800) y -= 0x1000;
-    if (z & 0x0800) z -= 0x1000;
-    // +-2g range: 1 LSB = 0.98 mg -> print milli-g directly.
+    // 12-bit signed decode (see accAxis); 3.91 mg/LSB.
+    int32_t xr = ((int32_t)d[1] << 4) | (d[0] >> 4);
+    int32_t yr = ((int32_t)d[3] << 4) | (d[2] >> 4);
+    int32_t zr = ((int32_t)d[5] << 4) | (d[4] >> 4);
+    if (xr & 0x0800) xr -= 0x1000;
+    if (yr & 0x0800) yr -= 0x1000;
+    if (zr & 0x0800) zr -= 0x1000;
     SerialUSB.print("mg x=");
-    SerialUSB.print(x);
+    SerialUSB.print(xr * 391 / 100);
     SerialUSB.print(" y=");
-    SerialUSB.print(y);
+    SerialUSB.print(yr * 391 / 100);
     SerialUSB.print(" z=");
-    SerialUSB.println(z);
+    SerialUSB.println(zr * 391 / 100);
   }
   delay(200);
 }

@@ -9,18 +9,16 @@
 namespace {
 
 const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
-// Sensitivity retune (16 Nov, user feedback): the 16 Nov morning values
-// (scale 1000, dead zone 100, active 250) made the basket feel dead —
-// the original "too sensitive" complaint was the missing re-zero pinning
-// the basket, not the curve itself, so the middle ground sits much
-// closer to the original: full sweep at ~35 degrees of tilt, ~8 px of
-// basket travel per 10 degrees.
-const int32_t kTiltScale = 600;                  // delta for full deflection
-const int32_t kTiltDeadzone = 60;                // dead zone (hand jitter)
-const int32_t kTiltActiveMin = 140;              // |delta| for "actively steering"
-// On this board/shield mounting the X reading RISES as the board tilts
-// left, so without the flip the basket ran the wrong way (user feedback
-// 15 Nov). Set +1 if a future board mounts the shield rotated.
+// Sensitivity, in TRUE counts now that the decode is fixed (1 g ~= 256
+// counts): a tilt of theta degrees moves the axis by 256*sin(theta), so
+// 150 counts = full sweep at ~36 degrees, 12 counts of dead zone covers
+// hand jitter (~5 degrees), steering starts at ~8 degrees.
+const int32_t kTiltScale = 150;                  // delta for full deflection
+const int32_t kTiltDeadzone = 12;                // dead zone (hand jitter)
+const int32_t kTiltActiveMin = 35;               // |delta| for "actively steering"
+// On this board/shield mounting the X reading falls as the board tilts
+// left (observed 15 Nov through the old decode at small, pre-wrap
+// deltas — treat as empirical; flip if a board misbehaves).
 const int32_t kTiltSign = -1;
 
 bool i2cPresent(uint8_t addr) {
@@ -44,11 +42,16 @@ bool accWriteReg(uint8_t addr, uint8_t reg, uint8_t val) {
   return Wire.endTransmission() == 0;
 }
 
-// BMA25x / BMX055 shared data decode: 12-bit left-justified, signed.
+// BMA25x / BMX055 shared data decode: 12-bit signed, MSB register holds
+// bits 11:4 and the LSB register's high nibble holds bits 3:0.
+// The first version took (msb & 0x0F) << 8 | lsb — the low 8 value bits
+// shifted up 4 — so any magnitude past ~500 mg wrapped to a large
+// negative number: the basket slammed the wrong way mid-tilt, jumped,
+// and the EMA cancelled itself around the wrap (user symptoms 16 Nov).
 int16_t axisRaw(const uint8_t *d, uint8_t idx) {
-  int16_t v = (int16_t)(((d[idx * 2 + 1] & 0x0F) << 8) | d[idx * 2]);
-  if (v & 0x0800) v -= 0x1000;
-  return v;
+  int32_t v = ((int32_t)d[idx * 2 + 1] << 4) | (d[idx * 2] >> 4);
+  if (v & 0x0800) v -= 0x1000;  // sign-extend from bit 11
+  return (int16_t)v;            // counts; 1 g ~= 256 (3.91 mg/LSB)
 }
 
 }  // namespace
@@ -103,6 +106,23 @@ void ImuApp::calibrate() {
   SerialLog.print(neutral_x_);
   SerialLog.print(" y=");
   SerialLog.println(neutral_y_);
+}
+
+void ImuApp::debug_print() {
+  // 1 Hz tilt trace (16 Nov bench): neutral / smoothed raw / delta /
+  // scaled tilt / active flag, so the game curve is tuned from measured
+  // wrist motion instead of guesses.
+  if (!available_ || !calibrated_) return;
+  SerialLog.print("imu dbg: neutral=");
+  SerialLog.print(neutral_x_);
+  SerialLog.print(" raw=");
+  SerialLog.print(smooth_x_ / 256);
+  SerialLog.print(" delta=");
+  SerialLog.print((smooth_x_ / 256) - neutral_x_);
+  SerialLog.print(" tilt=");
+  SerialLog.print(tilt_);
+  SerialLog.print(" act=");
+  SerialLog.println(tilt_active_ ? 1 : 0);
 }
 
 void ImuApp::rezero() {
