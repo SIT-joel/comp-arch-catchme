@@ -27,6 +27,8 @@ class ImuApp {
   // starts so the CURRENT hold angle is neutral (boot-time neutral does
   // not match how the board is held during play).
   void rezero();
+  // 1 Hz bench trace of the full tilt pipeline (call from the game view).
+  void debug_print();
 
  private:
   bool probe();
