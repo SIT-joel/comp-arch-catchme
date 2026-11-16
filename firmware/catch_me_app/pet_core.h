@@ -72,8 +72,8 @@ class PetCore {
   // --- Snack Catch mini-game (~10 Hz via wants_fast_render) ---
   bool game_active() const { return game_active_; }
   const char* game_start();      // NULL = started; else refusal message
-  void game_move(int8_t dir);    // -1 left / +1 right (button edge)
-  void game_move_tilt(int8_t x); // absolute basket position (tilt control)
+  void game_move(int8_t dir);    // -1 left / +1 right (button nudge)
+  void game_move_tilt(int8_t x); // steering speed input (rate control)
   void game_quit();
   uint8_t game_caught() const { return game_caught_; }
   uint8_t game_missed() const { return game_missed_; }
@@ -95,6 +95,7 @@ class PetCore {
   // Pending care event for the UI retransmit loop (false = nothing pending).
   bool care_event_pending(uint32_t* ymd_out, uint64_t* nonce_out) const;
   void care_event_acked(uint64_t nonce);  // called on matching ACK
+  void identity_acked(uint64_t nonce);    // called on matching ACK after bonding/sync
 
  private:
   void apply_decay(uint32_t dt_ms);
@@ -109,7 +110,9 @@ class PetCore {
   bool game_active_ = false;
   uint8_t game_caught_ = 0;
   uint8_t game_missed_ = 0;
-  int8_t game_basket_x_ = 42;
+  int8_t game_basket_x_ = 47;
+  int8_t game_tilt_ = 0;         // steering speed input (-100..100)
+  int16_t game_vel_rem_ = 0;     // carried fraction (px*100 per step)
   uint32_t game_last_step_ms_ = 0;
   uint32_t game_next_spawn_ms_ = 0;
   int8_t snack_x_[3] = {-1, -1, -1};
@@ -133,6 +136,11 @@ class PetCore {
   uint32_t care_ymd_ = 0;
   uint64_t care_nonce_ = 0;
   uint32_t care_last_send_ms_ = 0;
+
+  // Pet identity outbox (syncs species/name to the server on bond or blank mirror).
+  bool identity_pending_ = false;
+  uint64_t identity_nonce_ = 0;
+  uint32_t identity_last_send_ms_ = 0;
 
   // Server mirror.
   uint8_t server_level_ = 0;

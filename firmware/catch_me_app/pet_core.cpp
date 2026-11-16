@@ -156,6 +156,26 @@ void PetCore::tick() {
     }
   }
 
+  // Retransmit an unacknowledged pet identity (species + name) on bond or
+  // when the server mirror still has no pet.
+  if (identity_pending_ && bonded() && g_ble.phoneConnected() &&
+      now - identity_last_send_ms_ >= 3000) {
+    const PetState& st = g_pet.state();
+    uint8_t name_len = (uint8_t)strnlen(st.name, 8);
+    if (name_len > 0 && st.species <= 2) {
+      uint8_t wire[19];
+      memset(wire, 0, sizeof(wire));
+      wire[0] = 1;
+      wire[1] = st.species;
+      wire[2] = name_len;
+      memcpy(wire + 3, &identity_nonce_, 8);
+      memcpy(wire + 11, st.name, name_len);
+      if (g_ble.send_message(MSG_PET_IDENTITY, wire, (uint16_t)(11 + name_len))) {
+        identity_last_send_ms_ = now;
+      }
+    }
+  }
+
   if (pop_event() == PEV_EVOLVE) {
     evolve_flash_until_ms_ = now + CM_EVOLVE_FLASH_MS;
   }
@@ -198,8 +218,15 @@ void PetCore::note_server_pet(uint32_t xp, uint8_t level, uint8_t stage,
   st.server_stage = stage;
   server_level_ = level;
   server_synced_ = true;
-  if (name[0] && strncmp(st.name, name, sizeof(st.name)) != 0) {
-    // The server mirror is authoritative for the display name once set.
+  if (!name[0]) {
+    // Server has no mirrored pet yet: push our wearable-owned species/name up.
+    if (bonded() && st.name[0] && !identity_pending_) {
+      identity_pending_ = true;
+      identity_nonce_ = ((uint64_t)millis() << 20) ^ (s_pet_prng *= 6364136223846793005ULL);
+      identity_last_send_ms_ = 0;
+    }
+  } else if (!identity_pending_ && strncmp(st.name, name, sizeof(st.name)) != 0) {
+    // The server mirror is authoritative for the display name once synced.
     strncpy(st.name, name, sizeof(st.name) - 1);
     st.name[sizeof(st.name) - 1] = 0;
     persist_soon();
@@ -253,6 +280,12 @@ void PetCore::care_event_acked(uint64_t nonce) {
   SerialLog.println(care_ymd_);
 }
 
+void PetCore::identity_acked(uint64_t nonce) {
+  if (!identity_pending_ || identity_nonce_ != nonce) return;  // stale ACK
+  identity_pending_ = false;
+  SerialLog.println("pet_core: pet identity synced to server");
+}
+
 // --- Bonding ---
 
 void PetCore::bond_cycle_species() {
@@ -281,13 +314,25 @@ void PetCore::naming_commit_char() {
     PetState& st = g_pet.state();
     st.species = bond_species_;
     memset(st.name, 0, sizeof(st.name));
-    strncpy(st.name, name_buf_, sizeof(st.name) - 1);
+    bool has_alnum = false;
+    for (uint8_t k = 0; name_buf_[k]; k++) {
+      if (name_buf_[k] != ' ') { has_alnum = true; break; }
+    }
+    if (has_alnum) {
+      strncpy(st.name, name_buf_, sizeof(st.name) - 1);
+    } else {
+      static const char* kDefNames[3] = {"Spark", "Fluff", "Pip"};
+      strncpy(st.name, kDefNames[bond_species_ % 3], sizeof(st.name) - 1);
+    }
     st.hunger = 80;
     st.happiness = 80;
     st.energy = 80;
     naming_ = false;
     last_activity_ms_ = millis();
     alone_since_ms_ = millis();
+    identity_pending_ = true;
+    identity_nonce_ = ((uint64_t)millis() << 20) ^ (s_pet_prng *= 6364136223846793005ULL);
+    identity_last_send_ms_ = 0;
     g_pet.commit();
     SerialLog.print("pet_core: bonded species=");
     SerialLog.print((int)st.species);
@@ -321,6 +366,8 @@ void PetCore::wipe_for_rebond() {
   care_pending_ = false;
   care_ymd_ = 0;
   care_last_send_ms_ = 0;
+  identity_pending_ = false;
+  identity_last_send_ms_ = 0;
   server_level_ = 0;
   server_synced_ = false;
   naming_ = false;
@@ -370,7 +417,9 @@ const char* PetCore::game_start() {
   game_active_ = true;
   game_caught_ = 0;
   game_missed_ = 0;
-  game_basket_x_ = 47;  // center of the on-screen clamp range 6..89
+  game_basket_x_ = 47;  // center of the on-screen clamp range 8..87
+  game_tilt_ = 0;
+  game_vel_rem_ = 0;
   for (uint8_t k = 0; k < 3; k++) {
     snack_x_[k] = -1;
     snack_y_[k] = 0;
@@ -385,27 +434,27 @@ const char* PetCore::game_start() {
 
 void PetCore::game_move(int8_t dir) {
   if (!game_active_) return;
-  // Clamp range 6..89 keeps the whole 13 px basket sprite on the 96 px
-  // screen (drawRect(bx - 6, .., 13, ..) spans bx-6 .. bx+6); the old 2
-  // clamp drew from x = -4 and the basket vanished at the left edge.
-  // Arithmetic in int: the old uint8_t wrap (2 - 6 = 252) jumped the
-  // basket to the right edge instead of stepping left.
+  // Clamp range 8..87 keeps the whole 17 px basket sprite on the 96 px
+  // screen (drawRect(bx - 8, .., 17, ..) spans bx-8 .. bx+8). Arithmetic
+  // in int: the old uint8_t wrap (2 - 6 = 252) jumped the basket to the
+  // right edge instead of stepping left.
   int32_t bx = (int32_t)game_basket_x_ + dir * 6;
-  if (bx < 6) bx = 6;
-  if (bx > 89) bx = 89;
+  if (bx < 8) bx = 8;
+  if (bx > 87) bx = 87;
   game_basket_x_ = (uint8_t)bx;
   note_activity();
 }
 
 void PetCore::game_move_tilt(int8_t x) {
-  // Tilt control (15 Nov): the accelerometer's calibrated tilt maps the
-  // basket position directly — hold the board facing you and tilt. The
-  // buttons still work (the UI feeds whichever input arrived last).
+  // Rate-control steering (17 Nov redesign): the tilt is a SPEED input,
+  // not a position — game_step() advances the basket by up to
+  // CM_GAME_TILT_RATE_PX per step, with the fraction carried over. Slaving
+  // the position to the hand angle failed three ways: hold drift pinned
+  // the basket at a clamp edge ("sensitivity goes down after a while"),
+  // and every hand shake moved it. A tilt inside the dead zone reports 0,
+  // so shakes hold the basket still. The buttons remain instant nudges.
   if (!game_active_) return;
-  int32_t bx = 47 + (int32_t)x * 42 / 100;
-  if (bx < 6) bx = 6;
-  if (bx > 89) bx = 89;
-  game_basket_x_ = (uint8_t)bx;
+  game_tilt_ = x;
   note_activity();
 }
 
@@ -427,6 +476,21 @@ void PetCore::game_step(uint32_t now) {
   if (now - game_last_step_ms_ < CM_GAME_STEP_MS) return;
   game_last_step_ms_ = now;
 
+  // Rate-control steering: speed = tilt * CM_GAME_TILT_RATE_PX / 100 px
+  // per step; the remainder accumulates so a gentle tilt still crosses
+  // the screen smoothly instead of stalling under integer rounding.
+  if (game_tilt_ != 0) {
+    const int32_t total = (int32_t)game_tilt_ * CM_GAME_TILT_RATE_PX + game_vel_rem_;
+    const int32_t step = total / 100;
+    game_vel_rem_ = (int16_t)(total % 100);
+    if (step != 0) {
+      int32_t bx = (int32_t)game_basket_x_ + step;
+      if (bx < 8) bx = 8;
+      if (bx > 87) bx = 87;
+      game_basket_x_ = (uint8_t)bx;
+    }
+  }
+
   // Spawning: keep up to 2 snacks falling.
   uint8_t falling = 0;
   for (uint8_t k = 0; k < 3; k++) {
@@ -443,9 +507,9 @@ void PetCore::game_step(uint32_t now) {
     game_next_spawn_ms_ = now + 900 - (uint32_t)min(500, (int)game_caught_ * 40);
   }
 
-  // Falling + catch/miss. Basket: 12 px wide at y=52..55.
-  const int bx0 = game_basket_x_ - 6;
-  const int bx1 = game_basket_x_ + 6;
+  // Falling + catch/miss. Basket: 17 px wide at y=52..55.
+  const int bx0 = game_basket_x_ - 8;
+  const int bx1 = game_basket_x_ + 8;
   for (uint8_t k = 0; k < 3; k++) {
     if (snack_x_[k] < 0) continue;
     snack_y_[k] += 1 + game_caught_ / 6;  // gentle difficulty ramp
