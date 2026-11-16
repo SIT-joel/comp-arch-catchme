@@ -9,13 +9,13 @@
 namespace {
 
 const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
-// Sensitivity, in TRUE counts now that the decode is fixed (1 g ~= 256
-// counts): a tilt of theta degrees moves the axis by 256*sin(theta), so
-// 150 counts = full sweep at ~36 degrees, 12 counts of dead zone covers
-// hand jitter (~5 degrees), steering starts at ~8 degrees.
-const int32_t kTiltScale = 150;                  // delta for full deflection
-const int32_t kTiltDeadzone = 12;                // dead zone (hand jitter)
-const int32_t kTiltActiveMin = 35;               // |delta| for "actively steering"
+// Sensitivity, in TRUE counts (1 g ~= 256): a tilt of theta degrees moves
+// the axis by 256*sin(theta). With rate-control steering (tilt = speed),
+// the dead zone is the shake null band — 20 counts (~5 degrees) absorbs
+// normal hand jitter, full speed arrives at ~36 degrees.
+const int32_t kTiltScale = 150;                  // delta for full speed
+const int32_t kTiltDeadzone = 20;                // shake null band
+const int32_t kTiltActiveMin = 30;               // informational/debug only
 // On this board/shield mounting the X reading falls as the board tilts
 // left (observed 15 Nov through the old decode at small, pre-wrap
 // deltas — treat as empirical; flip if a board misbehaves).

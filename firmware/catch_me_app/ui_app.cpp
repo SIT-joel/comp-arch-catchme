@@ -127,7 +127,9 @@ void UiApp::tick() {
   // much easier than button mashing; the buttons still work as before.
   if ((screen_ == SCR_PET || screen_ == SCR_CARE) &&
       (g_petcore.game_active() || game_view_)) {
-    if (g_imu.available() && g_imu.tilt_active()) {
+    // Rate control: feed the tilt every frame — it is 0 inside the shake
+    // dead zone, so the basket holds still while the hand is steady.
+    if (g_imu.available()) {
       g_petcore.game_move_tilt(g_imu.tilt());
     }
     static uint32_t imu_dbg_ms = 0;  // 1 Hz tilt trace while playing
@@ -687,8 +689,8 @@ void UiApp::render_game() {
       display_.drawRect((uint8_t)sx[k] - 1, (uint8_t)sy[k] + 4, 3, 3, 1, TS_8b_Yellow);
     }
     const uint8_t bx = (uint8_t)g_petcore.game_basket_x();
-    display_.drawRect(bx - 6, 52, 13, 4, 1, TS_8b_Brown);
-    display_.drawRect(bx - 6, 52, 13, 1, 1, TS_8b_DarkBrown);
+    display_.drawRect(bx - 8, 52, 17, 4, 1, TS_8b_Brown);
+    display_.drawRect(bx - 8, 52, 17, 1, 1, TS_8b_DarkBrown);
     return;
   }
 
@@ -699,10 +701,10 @@ void UiApp::render_game() {
   display_.setCursor(0, 28);
   display_.setFont(liberationSans_8ptFontInfo);
   display_.fontColor(TS_8b_Gray, TS_8b_Black);
-  display_.print("LL/LR: move basket");
+  display_.print("Tilt: steer");
   display_.setCursor(0, 40);
   display_.fontColor(TS_8b_Yellow, TS_8b_Black);
-  display_.print("UL: back to pet");
+  display_.print("LL/LR nudge, UL: exit");
 }
 
 void UiApp::render_pet() {
