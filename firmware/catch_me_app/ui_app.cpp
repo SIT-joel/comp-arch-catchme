@@ -167,7 +167,7 @@ void UiApp::tick() {
     // UL/UR fall through to global navigation below.
   }
 
-  // v2 care screen: full care actions; UL/UR navigate.
+  // v2 care screen: full care actions; UL navigates, UR starts the game.
   if (screen_ == SCR_CARE) {
     if (pressed & TSButtonLowerLeft) {
       if (g_petcore.feed()) feed_flash_ms_ = millis();
@@ -177,9 +177,11 @@ void UiApp::tick() {
       if (g_petcore.game_start() == nullptr) {
         g_imu.rezero();  // neutral = how the board is held right now
         game_view_ = true;
+        return;  // consume the press: don't also rotate CARE -> NEAR
       }
     }
-    // UL falls through to global navigation below.
+    // UR when the game refused to start (too tired/sick) and UL fall
+    // through to global navigation below.
   }
 
   if (pressed & TSButtonUpperRight) {

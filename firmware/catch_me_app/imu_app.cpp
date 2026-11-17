@@ -9,13 +9,15 @@
 namespace {
 
 const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
-// Sensitivity, in TRUE counts (1 g ~= 256): a tilt of theta degrees moves
-// the axis by 256*sin(theta). With rate-control steering (tilt = speed),
-// the dead zone is the shake null band — 20 counts (~5 degrees) absorbs
-// normal hand jitter, full speed arrives at ~36 degrees.
-const int32_t kTiltScale = 150;                  // delta for full speed
-const int32_t kTiltDeadzone = 20;                // shake null band
-const int32_t kTiltActiveMin = 30;               // informational/debug only
+// Sensitivity, in EMPIRICAL counts: on this module 1 g ~= 1024 counts
+// (boot neutrals measure |g| ~= 1033; the frozen -987 sample was a clean
+// -0.96 g mid-tilt) — NOT the 3.91 mg/LSB the BMA250E sheet suggests.
+// A tilt of theta degrees moves the axis by 1024*sin(theta), so with
+// rate-control steering: shake null band +-90 counts (~5 degrees), full
+// speed at ~35 degrees (scale 600).
+const int32_t kTiltScale = 600;                  // delta for full speed
+const int32_t kTiltDeadzone = 90;                // shake null band
+const int32_t kTiltActiveMin = 300;              // informational/debug only
 // On this board/shield mounting the X reading falls as the board tilts
 // left (observed 15 Nov through the old decode at small, pre-wrap
 // deltas — treat as empirical; flip if a board misbehaves).
@@ -51,7 +53,7 @@ bool accWriteReg(uint8_t addr, uint8_t reg, uint8_t val) {
 int16_t axisRaw(const uint8_t *d, uint8_t idx) {
   int32_t v = ((int32_t)d[idx * 2 + 1] << 4) | (d[idx * 2] >> 4);
   if (v & 0x0800) v -= 0x1000;  // sign-extend from bit 11
-  return (int16_t)v;            // counts; 1 g ~= 256 (3.91 mg/LSB)
+  return (int16_t)v;            // counts; 1 g ~= 1024 on this module
 }
 
 }  // namespace
@@ -125,6 +127,29 @@ void ImuApp::debug_print() {
   SerialLog.println(tilt_active_ ? 1 : 0);
 }
 
+void ImuApp::reinit(const char* why) {
+  // Self-heal (17 Nov): the accelerometer can freeze mid-game (stale data
+  // registers or a wedged I2C transaction), which pins the last tilt and
+  // breaks the steering with no recovery. Reset the peripheral, rewrite
+  // the configuration, and re-capture neutral so play continues.
+  last_reinit_ms_ = millis();
+  SerialLog.print("imu: reinit (");
+  SerialLog.print(why);
+  SerialLog.println(")");
+  read_fails_ = 0;
+  same_x_ = 0;
+  tilt_ = 0;
+  tilt_active_ = false;
+  Wire.end();
+  delay(5);
+  Wire.begin();
+  accWriteReg(acc_addr_, 0x11, 0x00);  // PMU_LPW: normal
+  accWriteReg(acc_addr_, 0x0F, 0x00);  // PMU_RANGE: +-2g
+  accWriteReg(acc_addr_, 0x10, 0x08);  // PMU_BW: 250 Hz
+  delay(10);
+  calibrate();  // fresh neutral + smooth reset; keeps the game playable
+}
+
 void ImuApp::rezero() {
   // Instant neutral capture from the smoothed value (no blocking reads).
   // Called when Snack Catch starts: the boot-time neutral reflects however
@@ -154,7 +179,24 @@ void ImuApp::tick() {
   if (now - last_read_ms_ < 50) return;  // 20 Hz
   last_read_ms_ = now;
   int16_t x, y, z;
-  if (!readAcc(x, y, z)) return;
+  if (!readAcc(x, y, z)) {
+    if (++read_fails_ >= 3) reinit("bus");
+    return;
+  }
+  read_fails_ = 0;
+  // Stale-data freeze (observed on hardware 17 Nov): the BMA250's data
+  // registers can stop updating mid-play — reads still succeed but keep
+  // returning one captured sample forever (raw pinned at -987 for
+  // minutes, feeding tilt=100 with no way back). A live sensor produces
+  // fresh conversions at 250 Hz and its 12-bit noise changes the value
+  // within a couple of reads, so 40 identical direct samples (~2 s at
+  // 20 Hz) means frozen. Re-init and re-zero.
+  if (x == last_x_) {
+    if (++same_x_ >= 40 && now - last_reinit_ms_ >= 2000) reinit("stale");
+  } else {
+    same_x_ = 0;
+  }
+  last_x_ = x;
   // EMA smoothing (alpha ~= 0.31 at 20 Hz) for a steady basket; the dead
   // zone absorbs the jitter this lets through, and the shorter lag keeps
   // the basket feeling attached to the hand.
