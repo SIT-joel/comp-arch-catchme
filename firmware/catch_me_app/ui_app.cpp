@@ -748,7 +748,7 @@ void UiApp::render_game() {
   display_.setCursor(0, 28);
   display_.setFont(liberationSans_8ptFontInfo);
   display_.fontColor(TS_8b_Gray, TS_8b_Black);
-  display_.print("Tilt: switch lane");
+  display_.print("Tilt: flick lane");
   display_.setCursor(0, 40);
   display_.fontColor(TS_8b_Yellow, TS_8b_Black);
   display_.print("LL/LR lane, UL: exit");

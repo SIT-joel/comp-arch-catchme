@@ -453,6 +453,7 @@ const char* PetCore::game_start() {
   game_caught_ = 0;
   game_missed_ = 0;
   game_lane_ = 1;
+  tilt_armed_ = true;
   game_basket_x_ = kLaneX[1];
   for (uint8_t k = 0; k < 3; k++) {
     snack_x_[k] = -1;
@@ -477,15 +478,27 @@ void PetCore::game_move(int8_t dir) {
 }
 
 void PetCore::game_move_tilt(int8_t x) {
-  // Lane selector with hysteresis (18 Nov): commit to an edge lane past
-  // +-50, back to the center below +-20; the band between holds the last
-  // lane, so borderline jitter never flickers.
+  // Swipe-style lane steps (18 Nov, second iteration): one tilt gesture
+  // past +-45 steps ONE lane; the tilt must return past +-20 before the
+  // next step arms. The absolute-hold version failed on the bench: the
+  // player's comfortable hold reads a constant bias (trace: tilt +29 for
+  // a whole round), so one edge lane sat beyond wrist travel. Gestures
+  // are RELATIVE motion from wherever the hand is — bias and hold drift
+  // stop mattering, and lane 0 -> 2 is two flicks, like a swipe.
   if (!game_active_) return;
-  uint8_t lane = game_lane_;
-  if (x <= -50) lane = 0;
-  else if (x >= 50) lane = 2;
-  else if (x >= -20 && x <= 20) lane = 1;
-  game_lane_ = lane;
+  if (tilt_armed_) {
+    if (x >= 45 && game_lane_ < 2) {
+      game_lane_++;
+      tilt_armed_ = false;
+    } else if (x <= -45 && game_lane_ > 0) {
+      game_lane_--;
+      tilt_armed_ = false;
+    } else if (x >= 45 || x <= -45) {
+      tilt_armed_ = false;  // bounce off the end lane consumes the arm
+    }
+  } else if (x >= -20 && x <= 20) {
+    tilt_armed_ = true;     // back near level: the next flick is armed
+  }
   note_activity();
 }
 
