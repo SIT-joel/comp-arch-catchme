@@ -1,5 +1,39 @@
 # Project progress
 
+## Code review & cross-stack bug fixes (software-verified; hardware walk-through pending) — 16 November 2026
+
+Audit of active non-raid features across Backend, Firmware, Android, and Web completed; fixes implemented and verified against real toolchains/test database:
+
+1. **Achievements & Quiz SSE/validation (`backend/`)**:
+   - `complete_and_award()` in `backend/app/services/interactions.py` now flushes awards and runs `check_and_unlock()` for each awarded participant, fixing missed achievement unlocks after `together` and `quiz` completions.
+   - `quiz_ace` in `backend/app/services/achievements.py` checks `len(marks) >= 1` so 1-interest partners can unlock it on 100% accuracy.
+   - `post_quiz_answer()` in `backend/app/routers/quiz.py` bumps `state_version` and publishes `session_completed` SSE events upon quiz completion.
+   - `sessions.py` rejects `quiz` creation/activation with `409 quiz_interests_required` if either partner has 0 `UserInterest` rows (preventing stuck `0/0` quizzes); `seed.py` seeds default interests (`gaming`/`music` for `miya`, `movies`/`travel` for `toma`) when empty; `test_quiz.py` adds regression tests for both (`test_quiz_requires_interests_for_both_partners`, `test_quiz_completion_unlocks_achievements_and_bumps_state_version`).
+   - Fixed flaky random `abs(hash(...)) % 1000` `firmware_alias` collision in `backend/tests/integration/test_discovery.py::provision_token` using `func.max(Device.firmware_alias) + 1`.
+2. **Wearable pet bonding sync + bench PIN + `MSG_ACK` (`firmware/`, `android/`)**:
+   - Added `MSG_PET_IDENTITY` (`25`, `[ver][species][nameLen][nonce LE64][name<=8]`) in `ble_app.h`, `pet_core.*`, `Frame.kt`, and `AppModel.kt`: bonding/renaming on the TinyScreen+ or connecting with an empty server pet mirror now syncs `species`/`name` to `PUT /api/v1/me/pet` and clears once ACKed via `MSG_INTERACTION_ACK` (`payload[9] != 0` guard added in `catch_me_app.ino`).
+   - Fixed `JSONObject.optString("name"/"species")` `"null"` string coercion bug in `AppModel.sendPetState()` and `MainActivity.kt` Pet Card.
+   - Fixed serial bench parser in `catch_me_app.ino` (`line_len < sizeof(line_buf) - 1` instead of `< 7`) so 8-char `PIN 1234` commands work.
+   - Fixed `AppModel.sendAck()` to send actual little-endian record `sequence` IDs rather than zeros.
+3. **Android active/pending quest session UI (`backend/`, `android/`)**:
+   - Added `needs_my_accept: bool = False` to `SessionBrief` (`schemas.py`, `devices.py`), regenerated `docs/openapi.json` (39 paths via `backend/scripts/export_openapi.py`), and added `SessionView` to `AppModel.UiState`.
+   - `MainActivity.kt` Quests card now renders pending/active sessions with progress, partner-wait status, **Accept** (when `needsMyAccept`), **Cancel**, disabled start buttons while active/pending, and `questError`.
+4. **Raid leftover cleanup & Web quiz/session polish (`backend/`, `firmware/`, `android/`, `web/`)**:
+   - Preserved `422 invalid_quest` rejection in `create_session()` while removing dead raid landmark lookup (`sessions.py`), `accept_session` raid gate (`_raid_gate_or_409`), and guarding `accept_session` if `quest is None`.
+   - Removed leftover `kRaidPeerAddr` / `raid_note_connected` / raid GATT discovery hooks in `ble_app.cpp` and `MSG_GAME_*` / `raid_active()` hooks in `catch_me_app.ino`.
+   - Removed `raidFightUntil`, `practiceRaidUntil`, `raidStartSentFor`, `landmarks`, and `MSG_RAID_OUTCOME` handling from `AppModel.kt`.
+   - Removed `/landmarks` polling and raid UI from `DashboardPage.tsx`; updated `SessionPage.tsx` title (`Know Your Partner`) + Quiz progress/question view and gated the legacy heart-rate graph to historical `heart_challenge` sessions only.
+
+**Verified software builds & tests (16 November 2026):**
+- **Backend**: `cd backend; .\.venv\Scripts\python -m pytest tests/unit tests/integration -v` → **89 passed, 0 failed** (against PostgreSQL test DB at `127.0.0.1:5433/catch_me_test`).
+- **OpenAPI**: `cd backend; .\.venv\Scripts\python scripts\export_openapi.py` → wrote `docs/openapi.json` with 39 paths.
+- **Web**: `cd web; npm.cmd run test -- --run` → **5 passed** (`src/graph.test.ts`); `npm.cmd run build` → `tsc -b && vite build` succeeded (31 modules).
+- **Android**: `cd android; D:\catch_me\tools\android\gradle\gradle-8.11.1\bin\gradle.bat assembleDebug --no-daemon` (with `JAVA_HOME=D:\catch_me\tools\android\jdk\jdk-21.0.12.1+1`) → **BUILD SUCCESSFUL** (`android/app/build/outputs/apk/debug/app-debug.apk`).
+- **Firmware**: `tools\arduino-cli\bin\arduino-cli.exe --config-file tools\arduino-cli\arduino-cli.yaml compile --fqbn TinyCircuits:samd:tinyscreen --build-property compiler.cpp.extra_flags=-DDEVICE_ID=1 firmware\catch_me_app` → **54,860 bytes (20%)**; `-DDEVICE_ID=2` → **54,252 bytes (20%)**.
+
+**Physical hardware verification still pending:**
+- Flash both TinyScreen+ units (`D1` & `D2`), install refreshed `app-debug.apk` on both phones, and run physical walk-through for wearable pet bonding/rename sync (`MSG_PET_IDENTITY`), serial bench `PIN 1234`, `together` PIN entry, `quiz` completion + achievement unlock, and `explore` phone GPS flow.
+
 ## 'Know Your Partner' quiz: implemented across all four platforms, PROVEN on hardware — 12 November 2026
 
 User-directed feature: a quiz quest built from the partners' profile
@@ -2586,3 +2620,27 @@ fixed and reflashed to both boards (COM3 = D1, COM7 = D2, boot verified):
    the right edge. The clamp is now 6..89 (whole 13 px sprite on the 96 px
    screen) with the arithmetic done in int; the center start is 47.
 
+
+**Tilt final shape (17 Nov):** serial-trace debugging settled the whole
+saga. Three firmware-level findings, all verified on hardware:
+1. The Bosch decode was wrong (12-bit data stitched from the wrong
+   nibbles), wrapping any reading past ~500 mg to a negative value —
+   the original "too sensitive / inverted / jumps" cluster.
+2. The BMA250's data registers can FREEZE mid-play (reads succeed but
+   return one captured sample for minutes — trace showed raw pinned at
+   -987 feeding tilt=100 with no recovery). ImuApp now self-heals:
+   re-init + re-zero after ~2 s of bit-identical samples or 3 failed
+   reads ("imu: reinit (stale|bus)" in the log).
+3. The module's true scale is 1 g ~= 1024 counts (boot |g| measures
+   ~1033; the frozen sample was a clean -0.96 g), not the 3.91 mg/LSB
+   sheet value. All tilt constants use the empirical scale.
+Product changes: Snack Catch steering is now RATE control (tilt = speed,
+null band ~5 degrees, full speed ~35 degrees; fraction carried so slow
+tilts still move), the basket is 17 px, feeding restores +8 energy and
+napping regenerates +1/min (energy previously had no recovery path —
+after ~8 rounds the game refused forever), a refused game start now says
+why on the CARE screen for 2.5 s ("too tired - LL feed"), and the UR
+that starts the game no longer falls through to the screen rotation
+(CARE -> NEAR detour). UR is consumed either way; NEAR is reached via
+UL,UL (CARE->PET->NEAR). Both boards flashed 17 Nov (COM3=D1, COM7=D2),
+boots verified. Pending: user play-test of the new steering feel.

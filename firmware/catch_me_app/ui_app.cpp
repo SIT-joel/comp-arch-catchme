@@ -174,14 +174,22 @@ void UiApp::tick() {
     }
     if (pressed & TSButtonLowerRight) g_petcore.pet_stroke();
     if (pressed & TSButtonUpperRight) {
-      if (g_petcore.game_start() == nullptr) {
+      // UR is ALWAYS the game button here — success enters the game view;
+      // a refusal (too tired / too sick) shows on this screen for 2.5 s.
+      // Consuming the press either way is what stops the stray rotation:
+      // the old fall-through sent refused starts to NEAR instead.
+      const char* err = g_petcore.game_start();
+      if (err == nullptr) {
         g_imu.rezero();  // neutral = how the board is held right now
         game_view_ = true;
-        return;  // consume the press: don't also rotate CARE -> NEAR
+      } else {
+        game_refusal_ = err;
+        game_refusal_ms_ = millis();
       }
+      return;
     }
-    // UR when the game refused to start (too tired/sick) and UL fall
-    // through to global navigation below.
+    // UL falls through to global navigation below (CARE -> PET; NEAR is
+    // then UL again from PET).
   }
 
   if (pressed & TSButtonUpperRight) {
@@ -314,8 +322,15 @@ void UiApp::render_care() {
   display_.fontColor(TS_8b_White, TS_8b_Black);
   display_.print("LL feed  LR pet");
   display_.setCursor(0, 24);
-  display_.fontColor(TS_8b_Yellow, TS_8b_Black);
-  display_.print("UR play Snack Catch");
+  if (millis() - game_refusal_ms_ < 2500 && game_refusal_[0]) {
+    // Say WHY the game refused instead of silently doing nothing.
+    display_.fontColor(TS_8b_Red, TS_8b_Black);
+    display_.print(game_refusal_);
+    display_.print(" - LL feed");
+  } else {
+    display_.fontColor(TS_8b_Yellow, TS_8b_Black);
+    display_.print("UR play Snack Catch");
+  }
 
   // Need bars: H(hunger) J(joy) E(energy).
   const uint8_t bw = 26;
