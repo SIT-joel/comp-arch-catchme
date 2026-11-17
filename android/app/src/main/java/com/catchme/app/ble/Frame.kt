@@ -44,6 +44,7 @@ object Frame {
     const val MSG_RAID_START = 22
     const val MSG_QUIZ_STATE = 23
     const val MSG_QUIZ_ANSWER = 24
+    const val MSG_PET_IDENTITY = 25
 
     fun crc8(data: ByteArray, n: Int): Int = crc8(data, n, 0x00)
 

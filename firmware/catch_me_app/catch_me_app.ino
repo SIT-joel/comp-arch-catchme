@@ -364,7 +364,7 @@ void loop() {
         SerialLog.println("care: pet wiped -> rebond flow");
       }
       line_len = 0;
-    } else if (line_len < 7) {
+    } else if (line_len < sizeof(line_buf) - 1) {
       line_buf[line_len++] = c;
     }
   }
@@ -416,21 +416,16 @@ void loop() {
       case MSG_INTERACTION_ACK:
         g_ui.apply_interaction_ack(payload, len);
         if (len >= 10) {
-          uint64_t ack_nonce = (uint64_t)payload[1] |
-                               ((uint64_t)payload[2] << 8) |
-                               ((uint64_t)payload[3] << 16) |
-                               ((uint64_t)payload[4] << 24) |
-                               ((uint64_t)payload[5] << 32) |
-                               ((uint64_t)payload[6] << 40) |
-                               ((uint64_t)payload[7] << 48) |
-                               ((uint64_t)payload[8] << 56);
-          g_ble.raid_outcome_acked(ack_nonce);
+          const uint64_t ack_nonce =
+              (uint64_t)payload[1] | ((uint64_t)payload[2] << 8) |
+              ((uint64_t)payload[3] << 16) | ((uint64_t)payload[4] << 24) |
+              ((uint64_t)payload[5] << 32) | ((uint64_t)payload[6] << 40) |
+              ((uint64_t)payload[7] << 48) | ((uint64_t)payload[8] << 56);
+          if (payload[9] != 0) {
+            g_petcore.care_event_acked(ack_nonce);
+            g_petcore.identity_acked(ack_nonce);
+          }
         }
-        g_petcore.care_event_acked(
-            (uint64_t)(payload[1] | ((uint64_t)payload[2] << 8) |
-                       ((uint64_t)payload[3] << 16) | ((uint64_t)payload[4] << 24) |
-                       ((uint64_t)payload[5] << 32) | ((uint64_t)payload[6] << 40) |
-                       ((uint64_t)payload[7] << 48) | ((uint64_t)payload[8] << 56)));
         break;
       case MSG_QUIZ_STATE:
         // [ver=1][active u8][idx u8][total u8] — the phone drives the quiz:
@@ -445,13 +440,7 @@ void loop() {
           g_ui.note_quiz_state(payload[1] != 0, payload[2], payload[3]);
         }
         break;
-      // (MSG_RAID_START removed 14 Nov: the raid quest was cut.)
-      case MSG_GAME_STATE:
-        g_game.apply_host_state(payload, len);
-        break;
-      case MSG_GAME_INPUT:
-        g_game.apply_client_input(payload, len);
-        break;
+      // (MSG_RAID_START / MSG_GAME_STATE / MSG_GAME_INPUT removed 14 Nov: raid cut.)
       case MSG_PET_STATE:
         // [ver=1][xp LE32][level u8][stage u8][cared u8][nameLen u8][name<=8]
         if (len >= 10 && payload[0] == 1) {
@@ -515,13 +504,8 @@ void loop() {
     }
   }
 
-  // v2: ~10 Hz while the pet mini-game is live; 1 Hz otherwise. The RAID
-  // fight renders slower (400 ms): the display shares SERCOM4 SPI with the
-  // BlueNRG, and clearScreen+redraw at 10 FPS alongside the 10 Hz raid
-  // traffic corrupted HCI traffic until the watchdog reset BOTH boards
-  // (verified live: gate runs with 1 Hz UI never reset; every fight did).
-  // 400 ms keeps the fight playable while cutting display SPI duty ~4x.
-  const uint32_t fast_render_ms = g_ble.raid_active() ? 400UL : 100UL;
+  // v2: ~10 Hz while the pet mini-game is live; 1 Hz otherwise.
+  const uint32_t fast_render_ms = 100UL;
   if (now - last_ui_ms >= (g_ui.wants_fast_render() ? fast_render_ms : CM_UI_REFRESH_MS)) {
     last_ui_ms = now;
     g_ui.render();

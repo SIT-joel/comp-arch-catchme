@@ -22,6 +22,7 @@ from app.models import (  # noqa: E402
     PartnershipMember,
     Reward,
     User,
+    UserInterest,
 )
 from app.security import hash_password, hash_token, new_token  # noqa: E402
 
@@ -72,6 +73,17 @@ def main() -> None:
 
     user_a, user_b = sorted(users.values(), key=lambda u: u.id)  # canonical pairing order
     db.flush()  # users must exist before the partnership's foreign keys resolve
+    default_interests = {
+        users.get("miya") and users["miya"].id: ("gaming", "music"),
+        users.get("toma") and users["toma"].id: ("movies", "travel"),
+    }
+    for uid, tags in default_interests.items():
+        if uid is None:
+            continue
+        has_interest = db.query(UserInterest.tag).filter(UserInterest.user_id == uid).first()
+        if has_interest is None:
+            for tag in tags:
+                db.add(UserInterest(user_id=uid, tag=tag))
     partnership_id = stable_uuid("pairing")
     if db.get(Partnership, partnership_id) is None and user_a.id != user_b.id:
         db.add(Partnership(id=partnership_id))

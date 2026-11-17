@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
+from app.events import bump_state_version, publish_state_event
 from app.models import QuestSession, SessionParticipant, User
 from app.schemas import QuizAnswerIn, QuizStateOut
 from app.services import quiz as quiz_service
@@ -63,6 +64,24 @@ def post_quiz_answer(
             detail={"code": "quiz_answer_invalid", "message": "choice must be 0-3, index >= 0."},
         )
     quest_session = _active_session_or_404(db, session_id, user)
+    was_completed = quest_session.state == "completed"
     quiz_service.record_answer(db, quest_session, user.id, body.question_index, body.choice)
-    db.commit()  # get_db never commits; the award + answers persist here
+    db.refresh(quest_session)
+    if not was_completed and quest_session.state == "completed":
+        version = bump_state_version(db)
+        participant_ids = [
+            row.user_id
+            for row in db.query(SessionParticipant)
+            .filter(SessionParticipant.session_id == quest_session.id)
+            .all()
+        ]
+        db.commit()  # get_db never commits; the award + answers persist here
+        publish_state_event(
+            participant_ids or [user.id],
+            version,
+            session_id=quest_session.id,
+            kind="session_completed",
+        )
+    else:
+        db.commit()  # get_db never commits; the award + answers persist here
     return QuizStateOut(**quiz_service.quiz_state(db, quest_session, user.id))

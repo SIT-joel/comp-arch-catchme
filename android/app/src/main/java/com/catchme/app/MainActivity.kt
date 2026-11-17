@@ -231,13 +231,14 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
             Card {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Pet")
-                    val species = pet.optString("species", "")
+                    val species = if (pet.isNull("species")) "" else pet.optString("species", "")
+                    val petName = if (pet.isNull("name")) species else pet.optString("name", species)
                     val stage = pet.optInt("evolution_stage", 1)
                     val stageLabel = when (stage) { 2 -> "teen"; 3 -> "adult"; else -> "baby" }
                     if (species.isBlank()) {
                         Text("No pet yet — bond with one on your TinyScreen+")
                     } else {
-                        Text("${pet.optString("name", species)} · ${species.replaceFirstChar { it.uppercase() }} ($stageLabel)")
+                        Text("$petName · ${species.replaceFirstChar { it.uppercase() }} ($stageLabel)")
                         Text(
                             "Level ${pet.optInt("level", 1)} · ${pet.optInt("lifetime_xp", 0)} XP · " +
                                 "streak ${pet.optInt("care_streak", 0)} · " +
@@ -248,28 +249,89 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
             }
         }
 
+        var questError by remember { mutableStateOf<String?>(null) }
         Card {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Quests")
+                ui.activeSession?.let { active ->
+                    val qTitle = when (active.questId) {
+                        "together" -> "Together Time"
+                        "explore" -> "Outdoor Visit"
+                        "quiz" -> "Know Your Partner"
+                        else -> active.questId
+                    }
+                    Text(
+                        "$qTitle · ${active.state}${if (active.demo) " (demo)" else ""}",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    if (active.targetMs != null && active.targetMs > 0) {
+                        val frac = (active.progressMs.toFloat() / active.targetMs.toFloat()).coerceIn(0f, 1f)
+                        LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
+                        Text("${active.progressMs / 1000}s / ${active.targetMs / 1000}s",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (active.state == "pending" && !active.needsMyAccept) {
+                        Text("Waiting for partner to accept…", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (active.state == "pending" && active.needsMyAccept) {
+                            Button(onClick = {
+                                questError = null
+                                model.acceptSession(active.sessionId) { ok, err ->
+                                    if (!ok) questError = err
+                                }
+                            }) { Text("Accept") }
+                        }
+                        Button(onClick = {
+                            questError = null
+                            model.cancelSession(active.sessionId) { ok, err ->
+                                if (!ok) questError = err
+                            }
+                        }) { Text("Cancel") }
+                    }
+                }
                 Row {
                     Switch(demoMode, { demoMode = it })
                     Text("Demo mode (short durations)")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { model.questAction("together", demoMode) { _, _ -> } }) {
+                    Button(
+                        enabled = ui.activeSession == null,
+                        onClick = {
+                            questError = null
+                            model.questAction("together", demoMode) { ok, err ->
+                                if (!ok) questError = err
+                            }
+                        },
+                    ) {
                         Text("Together")
                     }
-                    Button(onClick = { model.questAction("explore", demoMode) { _, _ -> } }) {
+                    Button(
+                        enabled = ui.activeSession == null,
+                        onClick = {
+                            questError = null
+                            model.questAction("explore", demoMode) { ok, err ->
+                                if (!ok) questError = err
+                            }
+                        },
+                    ) {
                         Text("Explore")
                     }
-                    Button(onClick = { model.questAction("quiz", demoMode) { _, _ -> } }) {
+                    Button(
+                        enabled = ui.activeSession == null,
+                        onClick = {
+                            questError = null
+                            model.questAction("quiz", demoMode) { ok, err ->
+                                if (!ok) questError = err
+                            }
+                        },
+                    ) {
                         Text("Quiz")
                     }
                 }
-                // (The Raid landmark buttons and the Practice fight button
-                // were removed 14 Nov: the raid quest was cut — the
-                // board-to-board sustained link drops at 23-30 s, a hardware
-                // wall. The quest set is together, explore, quiz.)
+                questError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

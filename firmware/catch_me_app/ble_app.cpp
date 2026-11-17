@@ -432,19 +432,7 @@ bool BleApp::apply_discovery_results(const uint8_t* p, uint16_t len) {
 }
 
 void BleApp::note_connect(uint16_t handle, uint8_t role, const uint8_t* bdaddr) {
-#if DEVICE_ID != 1
-  // On the CLIENT, both the phone AND the raid host arrive as role==1 (we
-  // are peripheral in both cases) — discriminate by the static peer address
-  // (board 1 = 01:80:E1:00:34:12, LSB-first bytes below). This also gives
-  // relay-miss tolerance: the host connecting IS the raid trigger for us.
-  static const uint8_t kRaidPeerAddr[6] = {0x12, 0x34, 0x00, 0xE1, 0x80, 0x01};
-  if (role == 1 && bdaddr && memcmp(bdaddr, kRaidPeerAddr, 6) == 0) {
-    if (!raid_mode_) raid_start(session_.demo, handle);
-    else raid_conn_handle_ = handle;
-    raid_note_connected(handle, role);
-    return;
-  }
-#endif
+  (void)bdaddr;
   if (role == 1) {  // we are peripheral: the phone connected
     phone_connected_ = true;
     conn_handle_ = handle;
@@ -979,19 +967,7 @@ extern "C" void HCI_Event_CB(void* pckt) {
         g_ble.gate_note_proc_complete();
       }
 #endif
-#if !CM_GAME_GATE
-      // v2 raid (product): discovery responses route to the raid handlers.
-      if (blue_evt->ecode == EVT_BLUE_GATT_DISC_READ_CHAR_BY_UUID_RESP) {
-        evt_gatt_disc_read_char_by_uuid_resp* evt =
-            (evt_gatt_disc_read_char_by_uuid_resp*)blue_evt->data;
-        if (g_ble.raid_active() && evt->event_data_length >= 3) {
-          uint16_t value_handle = evt->attr_value[1] | (evt->attr_value[2] << 8);
-          g_ble.raid_note_disc_resp(value_handle);
-        }
-      } else if (blue_evt->ecode == EVT_BLUE_GATT_PROCEDURE_COMPLETE) {
-        g_ble.raid_note_proc_complete();
-      }
-#endif
+      // (v2 raid removed 14 Nov — GATT char discovery no longer runs on product builds.)
       if (blue_evt->ecode == EVT_BLUE_GATT_ATTRIBUTE_MODIFIED) {
         evt_gatt_attr_modified_IDB05A1* evt = (evt_gatt_attr_modified_IDB05A1*)blue_evt->data;
 #if CM_GAME_GATE

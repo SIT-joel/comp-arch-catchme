@@ -398,6 +398,7 @@ def complete_and_award(db: Session, quest_session: QuestSession, at: datetime) -
         raise _problem(409, "session_not_active", "This quest is no longer active.")
     locked.state = "completed"
     locked.completed_at = at
+    awarded_accounts: list[User] = []
     for participant in (
         db.query(SessionParticipant)
         .filter(SessionParticipant.session_id == locked.id)
@@ -430,9 +431,16 @@ def complete_and_award(db: Session, quest_session: QuestSession, at: datetime) -
                 session_id=locked.id,
             )
         )
+        awarded_accounts.append(account)
     db.query(SessionPin).filter(SessionPin.session_id == locked.id).delete(synchronize_session=False)
     db.query(SessionPinHistory).filter(SessionPinHistory.session_id == locked.id).delete(synchronize_session=False)
     db.flush()
+    if awarded_accounts:
+        from app.services.achievements import check_and_unlock
+
+        for account in awarded_accounts:
+            check_and_unlock(db, account)
+        db.flush()
     return locked
 
 

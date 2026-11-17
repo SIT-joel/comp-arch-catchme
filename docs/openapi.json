@@ -836,7 +836,8 @@
               "together",
               "explore",
               "heart_challenge",
-              "raid"
+              "raid",
+              "quiz"
             ],
             "title": "Quest Id",
             "type": "string"
@@ -1718,7 +1719,8 @@
               "together",
               "explore",
               "heart_challenge",
-              "raid"
+              "raid",
+              "quiz"
             ],
             "title": "Quest Id",
             "type": "string"
@@ -1750,6 +1752,108 @@
           "quests"
         ],
         "title": "QuestsOut",
+        "type": "object"
+      },
+      "QuizAnswerIn": {
+        "properties": {
+          "choice": {
+            "title": "Choice",
+            "type": "integer"
+          },
+          "question_index": {
+            "title": "Question Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "question_index",
+          "choice"
+        ],
+        "title": "QuizAnswerIn",
+        "type": "object"
+      },
+      "QuizQuestionOut": {
+        "description": "One question as the answerer sees it: no correct index (server-scored).",
+        "properties": {
+          "answered": {
+            "title": "Answered",
+            "type": "boolean"
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "text",
+          "options",
+          "answered"
+        ],
+        "title": "QuizQuestionOut",
+        "type": "object"
+      },
+      "QuizStateOut": {
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "my_answered": {
+            "title": "My Answered",
+            "type": "integer"
+          },
+          "my_total": {
+            "title": "My Total",
+            "type": "integer"
+          },
+          "partner_answered": {
+            "title": "Partner Answered",
+            "type": "integer"
+          },
+          "partner_total": {
+            "title": "Partner Total",
+            "type": "integer"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuizQuestionOut"
+            },
+            "title": "Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "completed",
+          "my_total",
+          "my_answered",
+          "partner_total",
+          "partner_answered",
+          "questions"
+        ],
+        "title": "QuizStateOut",
         "type": "object"
       },
       "RaidOutcomeIn": {
@@ -1876,6 +1980,11 @@
               }
             ]
           },
+          "needs_my_accept": {
+            "default": false,
+            "title": "Needs My Accept",
+            "type": "boolean"
+          },
           "progress_ms": {
             "title": "Progress Ms",
             "type": "integer"
@@ -1885,7 +1994,8 @@
               "together",
               "explore",
               "heart_challenge",
-              "raid"
+              "raid",
+              "quiz"
             ],
             "title": "Quest Id",
             "type": "string"
@@ -1957,7 +2067,8 @@
             "enum": [
               "together",
               "explore",
-              "raid"
+              "raid",
+              "quiz"
             ],
             "title": "Quest Id",
             "type": "string"
@@ -2066,7 +2177,8 @@
               "together",
               "explore",
               "heart_challenge",
-              "raid"
+              "raid",
+              "quiz"
             ],
             "title": "Quest Id",
             "type": "string"
@@ -2442,6 +2554,67 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/achievements": {
+      "get": {
+        "operationId": "list_achievements_api_v1_achievements_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Achievements",
+        "tags": [
+          "achievements"
+        ]
+      }
+    },
+    "/api/v1/achievements/{user_id}": {
+      "get": {
+        "description": "Partner-view: another user's unlocked set (names/descriptions are\ncatalog-public; only the active partner can read it).",
+        "operationId": "list_for_user_api_v1_achievements__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List For User",
+        "tags": [
+          "achievements"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "login_api_v1_auth_login_post",
@@ -3625,6 +3798,102 @@
         "summary": "Post Pin",
         "tags": [
           "session interactions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/quiz": {
+      "get": {
+        "operationId": "get_quiz_api_v1_sessions__session_id__quiz_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Quiz",
+        "tags": [
+          "quiz"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/quiz/answer": {
+      "post": {
+        "operationId": "post_quiz_answer_api_v1_sessions__session_id__quiz_answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizAnswerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Quiz Answer",
+        "tags": [
+          "quiz"
         ]
       }
     },

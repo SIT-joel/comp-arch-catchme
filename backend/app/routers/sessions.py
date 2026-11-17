@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.deps import get_current_user, get_pair_partner
 from app.events import bump_state_version, get_state_version, publish_state_event
-from app.models import QuestSession, SessionParticipant, User
+from app.models import QuestSession, SessionParticipant, User, UserInterest
 from app.schemas import (
     ParticipantOut,
     RaidOutcomeIn,
@@ -178,6 +178,19 @@ def _raid_gate_or_409(db: Session, quest_session: QuestSession) -> None:
             )
 
 
+def _require_quiz_interests_or_409(db: Session, user_id: uuid.UUID, partner_id: uuid.UUID) -> None:
+    for uid in (user_id, partner_id):
+        has_interest = db.query(UserInterest.tag).filter(UserInterest.user_id == uid).first()
+        if has_interest is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "quiz_interests_required",
+                    "message": "Both partners need at least one interest in their discovery profile to play Know Your Partner.",
+                },
+            )
+
+
 @router.post("", response_model=SessionOut, status_code=201)
 def create_session(
     body: SessionCreateIn,
@@ -199,26 +212,13 @@ def create_session(
                 "message": "Explore requires a configured demo geofence (CM_GEOFENCE_LAT/LON).",
             },
         )
+    if body.quest_id == "quiz":
+        _require_quiz_interests_or_409(db, user_id, partner_id)
 
-    landmark = None
-    if body.quest_id == "raid":
-        if not body.landmark_id:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "landmark_required", "message": "A raid session requires a landmark_id."},
-            )
-        from app.models import Landmark
-
-        landmark = db.get(Landmark, body.landmark_id)
-        if landmark is None:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "landmark_not_found", "message": "No such landmark."},
-            )
-    elif body.landmark_id:
+    if body.landmark_id:
         raise HTTPException(
             status_code=422,
-            detail={"code": "landmark_only_for_raid", "message": "landmark_id applies only to raid sessions."},
+            detail={"code": "landmark_not_supported", "message": "landmark_id is no longer supported (raid quest removed)."},
         )
 
     existing = _non_terminal_session(db, user_id, partner_id)
@@ -236,7 +236,7 @@ def create_session(
         demo=body.demo,
         state="pending",
         created_by=user.id,
-        landmark_id=landmark.id if landmark else None,
+        landmark_id=None,
     )
     db.add(quest_session)
     db.flush()
@@ -282,9 +282,14 @@ def accept_session(
         me.accepted_at = datetime.now(timezone.utc)
 
         if all(p.accepted_at is not None for p in participants):
+            quest = settings.quest_config(quest_session.quest_id)
+            if quest is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "invalid_quest", "message": "This quest is no longer available."},
+                )
             quest_session.state = "active"
             quest_session.activated_at = datetime.now(timezone.utc)
-            quest = settings.quest_config(quest_session.quest_id)
             quest_session.target_ms = (
                 quest["demo_duration_ms"] if quest_session.demo else quest["normal_duration_ms"]
             )
@@ -297,9 +302,8 @@ def accept_session(
                 quest_session.geofence_lat = settings.geofence_lat
                 quest_session.geofence_lon = settings.geofence_lon
                 quest_session.geofence_radius_m = settings.geofence_radius_m
-            if quest_session.quest_id == "raid":
-                _raid_gate_or_409(db, quest_session)
             if quest_session.quest_id == "quiz":
+                _require_quiz_interests_or_409(db, user_id, partner_id)
                 from app.services.quiz import generate_for_session
 
                 generate_for_session(db, quest_session)

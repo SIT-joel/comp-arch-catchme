@@ -56,11 +56,10 @@ class AppModel(private val context: Context, baseUrl: String) {
         val invitations: JSONObject? = null,
         val boardModeAcked: Boolean = false,
         val discoveryError: String? = null,
-        // --- v2: pet + raid ---
+        // --- v2: pet + quests ---
         val pet: JSONObject? = null,
-        val landmarks: List<LandmarkOpt> = emptyList(),
         val gpsFix: GpsFixView? = null,
-        val raidFight: Boolean = false,  // wearable is fighting; phone link paused
+        val activeSession: SessionView? = null,
         val quiz: QuizView? = null,  // v2 quiz: active 'Know Your Partner' state
         // --- achievements (15 Nov): the catalog + this user's unlocks ---
         val achievements: List<AccView> = emptyList(),
@@ -68,7 +67,15 @@ class AppModel(private val context: Context, baseUrl: String) {
         val newAchievementAt: Long = 0,  // ms epoch of the banner appearance
     )
 
-    data class LandmarkOpt(val id: String, val name: String)
+    data class SessionView(
+        val sessionId: UUID,
+        val questId: String,
+        val state: String,
+        val demo: Boolean,
+        val progressMs: Long,
+        val targetMs: Long?,
+        val needsMyAccept: Boolean,
+    )
 
     /** One achievement row for the achievements card (unlocked=false rows
      *  render greyed with their description as the "how to earn" hint). */
@@ -120,11 +127,6 @@ class AppModel(private val context: Context, baseUrl: String) {
     @Volatile private var discoveryTokenValue: Int? = null
     @Volatile private var boardAckedMode: Int = -1  // -1 = no ack yet
     private var discoveryJob: Job? = null
-    // v2 raid: the raid-start relay fires once per raid session activation;
-    // the link supervisor pauses while the wearables fight (radio is theirs).
-    @Volatile private var raidStartSentFor: String? = null
-    @Volatile private var raidFightUntil: Long = 0
-    @Volatile private var practiceRaidUntil: Long = 0
     private var lastResultsWire: String? = null
 
     fun login(username: String, password: String, onResult: (Boolean, String?) -> Unit) {
@@ -148,7 +150,7 @@ class AppModel(private val context: Context, baseUrl: String) {
                 refreshDeviceState()
                 startDiscoveryLoop()
                 refreshDiscoveryState()
-                refreshPetAndLandmarks()
+                refreshPetAndAchievements()
                 startGps()
                 onResult(true, null)
             } catch (e: Exception) {
@@ -199,7 +201,7 @@ class AppModel(private val context: Context, baseUrl: String) {
                 refreshDeviceState()
                 startDiscoveryLoop()
                 refreshDiscoveryState()
-                refreshPetAndLandmarks()
+                refreshPetAndAchievements()
                 startGps()
                 onRestored()
             }
@@ -257,12 +259,6 @@ class AppModel(private val context: Context, baseUrl: String) {
             // the interval back.
             keepGpsAlive()
             val state = ble.state.value
-            // v2 raid: while the wearables fight they own the radio — the
-            // phone must NOT hammer reconnects. Pause until the window ends
-            // (the fight is minutes; the wearable relinks after).
-            if (System.currentTimeMillis() < raidFightUntil) {
-                continue
-            }
             if (state is BleLink.State.Idle || state is BleLink.State.Failed) {
                 // Back off when the stack keeps refusing scans (observed on the
                 // S21+ as persistent SCAN_FAILED_REGISTRATION_FAILED): retrying
@@ -354,7 +350,7 @@ class AppModel(private val context: Context, baseUrl: String) {
             Frame.MSG_DISCOVERY_OBS -> handleDiscoveryObs(msg.payload)
             Frame.MSG_INTERACTION_COMMAND -> handleInteractionCommand(msg.payload)
             Frame.MSG_PET_CARE_EVENT -> handlePetCareEvent(msg.payload)
-            Frame.MSG_RAID_OUTCOME -> handleRaidOutcome(msg.payload)
+            Frame.MSG_PET_IDENTITY -> handlePetIdentity(msg.payload)
             Frame.MSG_QUIZ_ANSWER -> handleQuizAnswer(msg.payload)
             Frame.MSG_DISCOVERY_ACK -> {
                 // [ver][mode] — the wearable confirmed its applied mode.
@@ -441,19 +437,27 @@ class AppModel(private val context: Context, baseUrl: String) {
                 val ack = api.uploadBatch(device, batch)
                 // Mark exactly the acknowledged identities as synced.
                 val okIds = ArrayList<Long>(rows.size)
+                val ackSeqs = ArrayList<Long>(rows.size)
                 val byIdentity = rows.associateBy { it.bootId to it.sequence }
+                val activeBoot = bootIdCache
                 for (i in 0 until ack.getJSONArray("accepted").length()) {
                     val a = ack.getJSONArray("accepted").getJSONObject(i)
-                    byIdentity[a.getString("boot_id") to a.getLong("sequence")]?.let { okIds.add(it.id) }
+                    byIdentity[a.getString("boot_id") to a.getLong("sequence")]?.let {
+                        okIds.add(it.id)
+                        if (activeBoot == null || it.bootId == activeBoot) ackSeqs.add(it.sequence)
+                    }
                 }
                 // Duplicates are confirmed persisted too (idempotent no-op).
                 for (i in 0 until ack.getJSONArray("duplicates").length()) {
                     val a = ack.getJSONArray("duplicates").getJSONObject(i)
-                    byIdentity[a.getString("boot_id") to a.getLong("sequence")]?.let { okIds.add(it.id) }
+                    byIdentity[a.getString("boot_id") to a.getLong("sequence")]?.let {
+                        okIds.add(it.id)
+                        if (activeBoot == null || it.bootId == activeBoot) ackSeqs.add(it.sequence)
+                    }
                 }
                 if (okIds.isNotEmpty()) {
                     db.dao().markSynced(okIds)
-                    sendAck(okIds.size)
+                    sendAck(ackSeqs)
                 }
                 validationFailures = 0
                 _ui.value = _ui.value.copy(
@@ -479,12 +483,16 @@ class AppModel(private val context: Context, baseUrl: String) {
         }
     }
 
-    /** Relay server-persisted record count to the wearable (contiguous prefix). */
-    private fun sendAck(count: Int) {
-        val payload = ByteArray(1 + count * 4)
-        payload[0] = count.toByte()
-        // Sequences are implied by queue order in this slice; the firmware
-        // validates against its own queue, holes are never acked.
+    /** Relay server-persisted record sequences to the wearable (contiguous prefix). */
+    private fun sendAck(sequences: List<Long>) {
+        if (sequences.isEmpty()) return
+        val capped = sequences.take(16)
+        val payload = ByteArray(1 + capped.size * 4)
+        payload[0] = capped.size.toByte()
+        val buf = ByteBuffer.wrap(payload, 1, capped.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+        for (seq in capped) {
+            buf.putInt(seq.toInt())
+        }
         ble.send(Frame.MSG_ACK, payload)
     }
 
@@ -516,7 +524,9 @@ class AppModel(private val context: Context, baseUrl: String) {
                 _ui.value = _ui.value.copy(partnerDeviceId = partnerDevice)
                 _ui.value = _ui.value.copy(
                     sessionToken = token,
-                    sessionId = session?.let { UUID.fromString(it.getString("session_id")) })
+                    sessionId = session?.let { UUID.fromString(it.getString("session_id")) },
+                    activeSession = parseSessionView(session),
+                )
                 if (ble.state.value is BleLink.State.Connected) {
                     // v2 XP visibility: the pet mirror (level/XP) must refresh
                     // after quest awards, not only at sign-in — otherwise the
@@ -525,7 +535,7 @@ class AppModel(private val context: Context, baseUrl: String) {
                     val nowMs = System.currentTimeMillis()
                     if (nowMs - lastPetRefreshMs >= 10_000) {
                         lastPetRefreshMs = nowMs
-                        refreshPetAndLandmarks()
+                        refreshPetAndAchievements()
                     }
                     sendSessionState(ds)
                     sendInteractionState(ds)
@@ -569,7 +579,7 @@ class AppModel(private val context: Context, baseUrl: String) {
         if (session != null && session.getString("state") == "active") {
             out[0] = 1
             out[1] = when (session.getString("quest_id")) {
-                "together" -> 1; "explore" -> 2; "raid" -> 4; else -> 3 // 3 = legacy heart
+                "together" -> 1; "explore" -> 2; "quiz" -> 5; else -> 3 // 3 = legacy heart
             }
             out[2] = if (session.optBoolean("demo")) 1 else 0
             putU32(out, 3, session.optLong("progress_ms"))
@@ -736,14 +746,32 @@ class AppModel(private val context: Context, baseUrl: String) {
         return ((h xor (h shr 16)) and 0xFFFFu).toInt()
     }
 
+    private fun parseSessionView(session: JSONObject?): SessionView? {
+        if (session == null) return null
+        val id = runCatching { UUID.fromString(session.getString("session_id")) }.getOrNull()
+            ?: return null
+        return SessionView(
+            sessionId = id,
+            questId = session.optString("quest_id", ""),
+            state = session.optString("state", ""),
+            demo = session.optBoolean("demo", false),
+            progressMs = session.optLong("progress_ms", 0L),
+            targetMs = if (session.isNull("target_ms")) null else session.optLong("target_ms", 0L),
+            needsMyAccept = session.optBoolean("needs_my_accept", false),
+        )
+    }
+
     private fun refreshDeviceState() {
         scope.launch {
             runCatching {
                 val ds = _ui.value.deviceId?.let { api.deviceState(it) } ?: return@launch
                 val session = ds.optJSONObject("session")
+                val active = session != null && session.optString("state") == "active"
                 _ui.value = _ui.value.copy(
-                    sessionToken = session?.optString("token"),
-                    sessionId = session?.let { UUID.fromString(it.getString("session_id")) })
+                    sessionToken = if (active) session?.optString("token") else null,
+                    sessionId = session?.let { UUID.fromString(it.getString("session_id")) },
+                    activeSession = parseSessionView(session),
+                )
             }
         }
     }
@@ -752,6 +780,7 @@ class AppModel(private val context: Context, baseUrl: String) {
         scope.launch {
             try {
                 api.createSession(questId, demo, landmarkId)
+                refreshDeviceState()
                 onResult(true, null)
             } catch (e: Exception) {
                 onResult(false, e.message)
@@ -764,22 +793,32 @@ class AppModel(private val context: Context, baseUrl: String) {
 
     fun acceptSession(id: UUID, onResult: (Boolean, String?) -> Unit) {
         scope.launch {
-            try { api.acceptSession(id); onResult(true, null) }
-            catch (e: Exception) { onResult(false, e.message) }
+            try {
+                api.acceptSession(id)
+                refreshDeviceState()
+                onResult(true, null)
+            } catch (e: Exception) {
+                onResult(false, e.message)
+            }
         }
     }
 
     fun cancelSession(id: UUID, onResult: (Boolean, String?) -> Unit) {
         scope.launch {
-            try { api.cancelSession(id); onResult(true, null) }
-            catch (e: Exception) { onResult(false, e.message) }
+            try {
+                api.cancelSession(id)
+                refreshDeviceState()
+                onResult(true, null)
+            } catch (e: Exception) {
+                onResult(false, e.message)
+            }
         }
     }
 
     // ==================== v2: pet + phone GPS ====================
 
-    /** Refresh the server pet mirror and the raid landmark options. */
-    fun refreshPetAndLandmarks() {
+    /** Refresh the server pet mirror and achievements. */
+    fun refreshPetAndAchievements() {
         scope.launch {
             try {
                 _ui.value = _ui.value.copy(pet = api.pet())
@@ -787,16 +826,6 @@ class AppModel(private val context: Context, baseUrl: String) {
                 android.util.Log.w("AppModel", "pet fetch failed: ${e.message}")
             }
             refreshAchievements()
-            try {
-                val arr = api.landmarks()
-                val opts = (0 until arr.length()).mapNotNull { i ->
-                    val lm = arr.optJSONObject(i) ?: return@mapNotNull null
-                    LandmarkOpt(lm.optString("id"), lm.optString("name"))
-                }
-                _ui.value = _ui.value.copy(landmarks = opts)
-            } catch (e: Exception) {
-                android.util.Log.w("AppModel", "landmarks fetch failed: ${e.message}")
-            }
         }
     }
 
@@ -928,52 +957,40 @@ class AppModel(private val context: Context, baseUrl: String) {
         return rec
     }
 
-    /** Handle MSG_PET_CARE_EVENT (18): [ver][kind u8][date ASCII 10][nonce LE64].
-     * Maps to POST /me/pet/care and ACKs via MSG_INTERACTION_ACK (nonce-reused). */
-    /** v2 raid: MSG_RAID_OUTCOME (21) —
-     * [ver][outcome u8 1=win/2=lose][duration s LE16][nonce LE64][session UUID 16].
-     * Maps to POST /sessions/{id}/raid/outcome; fight start/end are derived
-     * honestly (ended = now; started = ended - duration). ACKs via the shared
-     * MSG_INTERACTION_ACK nonce reply. */
-    private fun handleRaidOutcome(payload: ByteArray) {
-        if (payload.size < 14 || payload[0].toInt() != 1) return
-        val outcome = when (payload[1].toInt()) { 1 -> "win"; 2 -> "lose"; else -> return }
-        val durationS = (payload[2].toInt() and 0xFF) or ((payload[3].toInt() and 0xFF) shl 8)
-        val nonceBuf = java.nio.ByteBuffer.wrap(payload, 4, 8)
-            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
-        val nonce = nonceBuf.long
-        val sessionBuf = java.nio.ByteBuffer.wrap(payload, 12, 16)
-            .order(java.nio.ByteOrder.BIG_ENDIAN)
-        val wireSession = UUID(sessionBuf.long, sessionBuf.long)
-        // The phone's own raid session id is authoritative; the wire UUID is
-        // a cross-check (the wearable may not have received an interaction
-        // relay, in which case it sends zeros).
-        val sessionId = _ui.value.sessionId ?: wireSession.takeIf { it != UUID(0, 0) } ?: run {
-            android.util.Log.w("AppModel", "raid outcome without a session id; dropped")
-            return
+    /** Handle MSG_PET_IDENTITY (25): [ver][species u8][nameLen u8][nonce LE64][name<=8].
+     * Mirrors the wearable's bonded species/name to PUT /api/v1/me/pet and
+     * ACKs via the shared MSG_INTERACTION_ACK nonce reply. */
+    private fun handlePetIdentity(payload: ByteArray) {
+        if (payload.size < 12 || payload[0].toInt() != 1) return
+        val species = when (payload[1].toInt() and 0xFF) {
+            0 -> "spark"
+            1 -> "fluff"
+            2 -> "pip"
+            else -> return
         }
-        val ended = java.time.Instant.now()
-        val started = ended.minusSeconds(durationS.toLong())
+        val nameLen = payload[2].toInt() and 0xFF
+        if (nameLen == 0 || nameLen > 8 || payload.size < 11 + nameLen) return
+        val nonce = ByteBuffer.wrap(payload, 3, 8).order(ByteOrder.LITTLE_ENDIAN).long
+        val rawName = String(payload, 11, nameLen, Charsets.US_ASCII).trim()
+        val name = rawName.ifEmpty { species.replaceFirstChar { it.uppercase() } }
         scope.launch {
             val ok = runCatching {
-                api.raidOutcome(
-                    sessionId, outcome, started.toString(), ended.toString(),
-                    UUID.nameUUIDFromBytes(
-                        "$sessionId:raid:$nonce".toByteArray(Charsets.US_ASCII)),
-                )
-            }.onSuccess {
-                _ui.value = _ui.value.copy(raidFight = false)
-                refreshDeviceState()
+                val updated = api.putPet(species, name)
+                _ui.value = _ui.value.copy(pet = updated)
+                if (ble.state.value is BleLink.State.Connected) {
+                    sendPetState()
+                }
             }.isSuccess
             val ack = ByteArray(10)
             ack[0] = 1
-            java.nio.ByteBuffer.wrap(ack, 1, 8)
-                .order(java.nio.ByteOrder.LITTLE_ENDIAN).putLong(nonce)
+            ByteBuffer.wrap(ack, 1, 8).order(ByteOrder.LITTLE_ENDIAN).putLong(nonce)
             ack[9] = if (ok) 1 else 0
             ble.send(Frame.MSG_INTERACTION_ACK, ack)
         }
     }
 
+    /** Handle MSG_PET_CARE_EVENT (18): [ver][kind u8][date ASCII 10][nonce LE64].
+     * Maps to POST /me/pet/care and ACKs via MSG_INTERACTION_ACK (nonce-reused). */
     private fun handlePetCareEvent(payload: ByteArray) {
         if (payload.size < 17 || payload[0].toInt() != 1) return
         val date = String(payload, 2, 10, Charsets.US_ASCII)
@@ -1121,7 +1138,8 @@ class AppModel(private val context: Context, baseUrl: String) {
         // at 1..4) — an earlier build shifted everything by one.
         val out = ByteArray(9 + 8)
         out[0] = 1 // ver
-        val name = pet.optString("name", "")
+        // In Android JSONObject, optString returns "null" when the JSON value is NULL.
+        val name = if (pet.isNull("species") || pet.isNull("name")) "" else pet.optString("name", "")
         val buf = java.nio.ByteBuffer.wrap(out).order(java.nio.ByteOrder.LITTLE_ENDIAN)
         buf.putInt(1, pet.optInt("lifetime_xp", 0))
         out[5] = pet.optInt("level", 1).toByte()
