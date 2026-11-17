@@ -327,6 +327,14 @@ void UiApp::render() {
 // keeps quick feed/stroke; this screen adds Snack Catch and the honest
 // care-sync state).
 void UiApp::render_care() {
+  // Snack Catch renders over CARE too (17 Nov): the game branch accepts
+  // input on PET and CARE, but only render_pet had the game guard — so a
+  // game started from CARE ran invisibly (the user saw CARE unchanged and
+  // concluded UR did nothing; the zero-refusal serial log proved it).
+  if (g_petcore.game_active() || game_view_) {
+    render_game();
+    return;
+  }
   const PetState& st = g_pet.state();
 
   display_.setFont(liberationSans_10ptFontInfo);
