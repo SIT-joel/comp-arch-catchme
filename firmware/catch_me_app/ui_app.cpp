@@ -137,6 +137,23 @@ void UiApp::tick() {
       imu_dbg_ms = millis();
       g_imu.debug_print();
     }
+    if (pressed & TSButtonUpperRight) {
+      // UR on the game's own start/finish page (re)starts the round —
+      // this page used to leave UR dead, which read as "UR does not
+      // start the game". On refusal, fall back to CARE which shows the
+      // reason in red. Mid-round UR stays a no-op (no mid-play re-zero).
+      if (!g_petcore.game_active()) {
+        const char* err = g_petcore.game_start();
+        if (err == nullptr) {
+          g_imu.rezero();  // neutral = how the board is held right now
+        } else {
+          game_refusal_ = err;
+          game_refusal_ms_ = millis();
+          game_view_ = false;  // back to CARE, where the reason shows
+        }
+      }
+      return;
+    }
     if (pressed & TSButtonLowerLeft) g_petcore.game_move(-1);
     if (pressed & TSButtonLowerRight) g_petcore.game_move(1);
     if (pressed & TSButtonUpperLeft) {
@@ -323,10 +340,9 @@ void UiApp::render_care() {
   display_.print("LL feed  LR pet");
   display_.setCursor(0, 24);
   if (millis() - game_refusal_ms_ < 2500 && game_refusal_[0]) {
-    // Say WHY the game refused instead of silently doing nothing.
+    // The refusal string carries its own fix hint ("sad - LR pet").
     display_.fontColor(TS_8b_Red, TS_8b_Black);
     display_.print(game_refusal_);
-    display_.print(" - LL feed");
   } else {
     display_.fontColor(TS_8b_Yellow, TS_8b_Black);
     display_.print("UR play Snack Catch");
