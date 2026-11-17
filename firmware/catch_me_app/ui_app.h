@@ -162,7 +162,7 @@ class UiApp {
 
  public:
   bool wants_fast_render() const {
-    return screen_ == SCR_PET && game_view_;
+    return (screen_ == SCR_PET || screen_ == SCR_CARE) && game_view_;
   }
 
  private:
