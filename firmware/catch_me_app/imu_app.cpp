@@ -12,17 +12,18 @@ const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
 // Sensitivity, in EMPIRICAL counts: on this module 1 g ~= 1024 counts
 // (boot neutrals measure |g| ~= 1033; the frozen -987 sample was a clean
 // -0.96 g mid-tilt) — NOT the 3.91 mg/LSB the BMA250E sheet suggests.
-// The tilt is range-normalized per side (see tick), so there is no fixed
-// full-speed scale; the dead zone stays the shake null band (~5 degrees).
-const int32_t kOneG = 1024;                      // empirical counts per g
-const int32_t kMinAvail = 200;                   // per-side travel floor
-const int32_t kTiltDeadzone = 90;                // shake null band
-const int32_t kTiltActiveMin = 300;              // informational/debug only
-// On this board/shield mounting the X reading falls as the board tilts
-// left (observed 15 Nov through the old decode at small, pre-wrap
-// deltas — treat as empirical; flip if a board misbehaves).
+// Steering axis choice and per-axis signs are in tick(). The dead zone is
+// the shake null band (~5 degrees); full speed at ~35 degrees.
+const int32_t kHoldSplit = 512;   // |neutral X| above this = vertical hold
+const int32_t kTiltScale = 600;   // delta for full speed (~35 degrees)
+const int32_t kTiltDeadzone = 90; // shake null band
+const int32_t kTiltActiveMin = 300;  // informational/debug only
+// Mount signs, empirically grounded: X rises when the board tilts left
+// (15 Nov, pre-wrap deltas) -> X needs -1. The same in-plane rotation
+// moves Y the opposite way -> +1. Flip here if a board ever feels
+// mirrored; the 1 Hz trace shows neutral/raw/delta for verification.
 const int32_t kTiltSign = -1;
-
+const int32_t kTiltSignY = 1;
 bool i2cPresent(uint8_t addr) {
   Wire.beginTransmission(addr);
   return Wire.endTransmission() == 0;
@@ -103,6 +104,7 @@ void ImuApp::calibrate() {
   neutral_x_ = sx / ok;
   neutral_y_ = sy / ok;
   smooth_x_ = neutral_x_ * 256;
+  smooth_y_ = neutral_y_ * 256;
   calibrated_ = true;
   SerialLog.print("imu: calibrated neutral x=");
   SerialLog.print(neutral_x_);
@@ -111,16 +113,20 @@ void ImuApp::calibrate() {
 }
 
 void ImuApp::debug_print() {
-  // 1 Hz tilt trace (16 Nov bench): neutral / smoothed raw / delta /
-  // scaled tilt / active flag, so the game curve is tuned from measured
-  // wrist motion instead of guesses.
+  // 1 Hz tilt trace (16 Nov bench): driving axis, neutral, smoothed raw,
+  // delta, scaled tilt, active flag — the game curve is tuned from
+  // measured wrist motion instead of guesses.
   if (!available_ || !calibrated_) return;
-  SerialLog.print("imu dbg: neutral=");
-  SerialLog.print(neutral_x_);
+  const bool vertical = neutral_x_ > kHoldSplit || neutral_x_ < -kHoldSplit;
+  const int32_t raw = vertical ? (smooth_y_ / 256) : (smooth_x_ / 256);
+  SerialLog.print("imu dbg: ax=");
+  SerialLog.print(vertical ? 'Y' : 'X');
+  SerialLog.print(" neutral=");
+  SerialLog.print(vertical ? neutral_y_ : neutral_x_);
   SerialLog.print(" raw=");
-  SerialLog.print(smooth_x_ / 256);
+  SerialLog.print(raw);
   SerialLog.print(" delta=");
-  SerialLog.print((smooth_x_ / 256) - neutral_x_);
+  SerialLog.print(raw - (vertical ? neutral_y_ : neutral_x_));
   SerialLog.print(" tilt=");
   SerialLog.print(tilt_);
   SerialLog.print(" act=");
@@ -158,10 +164,13 @@ void ImuApp::rezero() {
   // and pins the basket at the clamp edge (reported 15 Nov).
   if (!available_ || !calibrated_) return;
   neutral_x_ = smooth_x_ / 256;
+  neutral_y_ = smooth_y_ / 256;
   tilt_ = 0;
   tilt_active_ = false;
   SerialLog.print("imu: rezero neutral x=");
-  SerialLog.println(neutral_x_);
+  SerialLog.print(neutral_x_);
+  SerialLog.print(" y=");
+  SerialLog.println(neutral_y_);
 }
 
 bool ImuApp::readAcc(int16_t &x, int16_t &y, int16_t &z) {
@@ -198,23 +207,27 @@ void ImuApp::tick() {
   } else {
     no_new_ = 0;
   }
-  // EMA smoothing (alpha ~= 0.31 at 20 Hz) for a steady basket; the dead
-  // zone absorbs the jitter this lets through, and the shorter lag keeps
-  // the basket feeling attached to the hand.
-  smooth_x_ = (smooth_x_ * 7 + (int32_t)x * 256) / 8;
-  int32_t delta = (smooth_x_ / 256) - neutral_x_;
+  // EMA smoothing (alpha ~= 0.5 at 20 Hz): the dead zone absorbs the
+  // extra jitter, and the halved lag keeps the basket attached to the
+  // hand ("large delay before moving", 18 Nov).
+  smooth_x_ = (smooth_x_ + (int32_t)x * 256) / 2;
+  smooth_y_ = (smooth_y_ + (int32_t)y * 256) / 2;
+  // Dominant-axis steering (18 Nov): the player holds the board near
+  // VERTICAL, where X sits at ~0.9 g with almost no travel left on one
+  // side (the range-normalized attempt fixed that side but starved the
+  // other into a long delay). In the vertical hold the in-plane gravity
+  // rotates through Y first-order, and Y sits near 0 with the full +-1 g
+  // range — symmetric and responsive. A flat hold (X near 0) keeps using
+  // X. Sign per mount geometry: X rises on left tilt, so Y falls on left
+  // tilt (same in-plane rotation) — hence the per-axis signs.
+  const bool vertical = neutral_x_ > kHoldSplit || neutral_x_ < -kHoldSplit;
+  int32_t delta = vertical ? (smooth_y_ / 256 - neutral_y_)
+                           : (smooth_x_ / 256 - neutral_x_);
+  const int32_t sign = vertical ? kTiltSignY : kTiltSign;
   if (delta > kTiltDeadzone) delta -= kTiltDeadzone;
   else if (delta < -kTiltDeadzone) delta += kTiltDeadzone;
   else delta = 0;
-  // Range-normalized sensitivity: the player holds the board near
-  // vertical, so X sits at ~0.9 g and has only ~0.1 g of travel left on
-  // one side — a fixed scale made that side feel dead while the other
-  // slammed. Normalizing by the travel actually available in each
-  // direction keeps both sides even; the 3/2 gain brings full speed to a
-  // comfortable wrist arc.
-  int32_t avail = delta >= 0 ? (kOneG - neutral_x_) : (kOneG + neutral_x_);
-  if (avail < kMinAvail) avail = kMinAvail;
-  int32_t scaled = kTiltSign * ((delta * 150) / avail);
+  int32_t scaled = sign * ((delta * 100) / kTiltScale);
   if (scaled > 100) scaled = 100;
   if (scaled < -100) scaled = -100;
   tilt_ = (int8_t)scaled;
