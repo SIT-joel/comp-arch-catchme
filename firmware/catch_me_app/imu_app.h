@@ -45,9 +45,9 @@ class ImuApp {
   int32_t smooth_x_ = 0;
   uint32_t last_read_ms_ = 0;
   uint8_t acc_addr_ = 0;
+  bool new_data_ = false;       // BMA250 per-read "new data" flag
   uint8_t read_fails_ = 0;      // consecutive readAcc failures
-  int16_t last_x_ = 0;          // staleness detector (direct sensor value)
-  uint16_t same_x_ = 0;
+  uint16_t no_new_ = 0;         // consecutive reads without a new sample
   uint32_t last_reinit_ms_ = 0;
 };
 
