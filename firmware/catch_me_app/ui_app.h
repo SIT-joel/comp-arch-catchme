@@ -138,6 +138,9 @@ class UiApp {
   char interaction_status_[20] = {0};
   bool game_view_ = false;  // v2: Snack Catch view on the pet/care screens
   uint32_t feed_flash_ms_ = 0;  // brief "fed!" / refusal feedback
+  // Game-start refusal ("too tired" / "too sick") shown on CARE for 2.5 s.
+  const char* game_refusal_ = "";
+  uint32_t game_refusal_ms_ = 0;
   // v2 quiz (phone-driven; the wearable is the A-D pad like a Kahoot
   // controller): state arrives via MSG_QUIZ_STATE, answers leave via
   // MSG_QUIZ_ANSWER. Auto-takeover while active, like the PIN screen.

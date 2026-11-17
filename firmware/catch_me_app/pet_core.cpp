@@ -89,6 +89,18 @@ void PetCore::apply_decay(uint32_t dt_ms) {
     acc_energy -= CM_ENERGY_DECAY_MS;
     if (st.energy > 0) st.energy--;
   }
+  // Napping regenerates energy (17 Nov): without a recovery path the game
+  // became permanently unplayable once the rounds drained it.
+  static uint32_t acc_regen = 0;
+  if (napping && st.energy < 100) {
+    acc_regen += dt_ms;
+    if (acc_regen >= CM_ENERGY_REGEN_MS) {
+      acc_regen -= CM_ENERGY_REGEN_MS;
+      st.energy++;
+    }
+  } else {
+    acc_regen = 0;
+  }
 }
 
 void PetCore::tick() {
@@ -389,6 +401,10 @@ bool PetCore::feed() {
   // server owns the currency and the daily-care XP cap).
   st.hunger = (uint8_t)min(100, (int)st.hunger + CM_FEED_AMOUNT);
   st.happiness = (uint8_t)min(100, (int)st.happiness + 2);
+  // Energy (17 Nov): Snack Catch costs 10 per round and energy had NO
+  // recovery path — after ~8 test rounds the game refused forever. A
+  // snack now recharges a little, so demo play can continue immediately.
+  st.energy = (uint8_t)min(100, (int)st.energy + CM_FEED_ENERGY);
   feed_refusal_ = "";
   queue_care_event();
   persist_soon();

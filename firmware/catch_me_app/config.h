@@ -139,8 +139,10 @@
 #define CM_ENERGY_DECAY_MS 1800000UL          // -1 energy per 30 min awake
 #define CM_PET_PERSIST_MS 300000UL            // persist needs every 5 min
 #define CM_NAP_AFTER_MS 600000UL              // 10 min idle -> nap (decay halves)
+#define CM_ENERGY_REGEN_MS 60000UL            // +1 energy per min while napping
 #define CM_LONELY_MS 1800000UL                // 30 min alone -> lonely bubble
 #define CM_FEED_AMOUNT 25                     // hunger restored per snack
+#define CM_FEED_ENERGY 8                      // energy restored per snack
 #define CM_STROKE_AMOUNT 5                    // happiness per stroke
 #define CM_AWARD_HAPPY_BONUS 10               // happiness on quest award
 
