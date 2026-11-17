@@ -1,25 +1,25 @@
 # Catch Me — course prototype
 
-A computer architecture course prototype: two TinyScreen+ wearables collect GPS, heart rate, and direct Bluetooth peer-presence evidence. Two Android phones relay readings to a server. A web app awards points for shared quests.
+A computer architecture course prototype for making friends: two TinyScreen+ wearables (with a tamagotchi-style digital pet each) detect direct Bluetooth proximity, two Android phones relay evidence and GPS fixes to a FastAPI server, and the web app awards server-owned points/XP for shared quests. Quest set: **together** (mutual PIN), **explore** (landmark visit via phone GPS), **quiz** (Know-Your-Partner). Each wearable also plays a 3-lane tilt-controlled snack-catching game on its accelerometer.
 
-**Deadline:** 28 November 2026. **Current state:** see [Progress](docs/PROGRESS.md) — backend + web implemented and tested, firmware probes + app compiling, first physical board verified end-to-end for programming; BLE peer gate pending the second device.
+**Deadline:** 28 November 2026. **Current state:** see [Progress](docs/PROGRESS.md) — all layers implemented and hardware-verified: dual-phone E2E (proximity, explore, quiz, care, XP awards, achievements), pet system live on both boards, tilt mini-game on both boards.
 
 ## Start here
 
-Newest GLM task: [Quest interaction plan](docs/QUEST_INTERACTION_PLAN.md) — 30-second together demo with mutual four-digit start/end PIN exchange on TinyScreen+, and Keep Your Cool truth-or-dare with live heart-rate comparisons. Planned work; preserve the existing application and hardware results.
-
-The next approved extension is [Nearby discovery](docs/DISCOVERY_PLAN.md): Bluetooth plus fresh/last-known wearable GPS, editable profiles, and partner invitations. GPS is fresh through 30 seconds and usable with age labels through 15 minutes. No phone location. This documentation revision does not claim those features are implemented.
+The v2 product revision (6 Nov 2026, user-directed; see [AGENTS.md](AGENTS.md)) supersedes older documents where they conflict: **phone GPS** replaces the wearable GPS shield, the **heart-rate quest is removed** (no sensor in the required stack), a **digital pet** lives on each board (server-owned XP, daily care cap), and the landmark **raid quest was removed** on 14 Nov (board-to-board sustained link drops at 23-30 s — a documented hardware wall).
 
 1. Read [AGENTS.md](AGENTS.md), then the [implementation plan](docs/IMPLEMENTATION_PLAN.md).
 2. Tooling: [tools and setup](docs/TOOLS_AND_SETUP.md); portable arduino-cli toolchain lives in `tools/arduino-cli/` (git-ignored).
-3. Local stack quickstart: `docker compose -f infra/docker-compose.yml up -d db`, then migrations/seed/server per [backend/README.md](backend/README.md). Web: `cd web && npm install && npm run dev`.
+3. **Firmware build/flash/verify recipe: [firmware/README.md](firmware/README.md)** — pinned toolchain, required core patches, per-board build flags, flash scripts, boot verification, tilt tuning.
+4. Local stack quickstart: `docker compose -f infra/docker-compose.yml up -d db`, then migrations/seed/server per [backend/README.md](backend/README.md). Web: `cd web && npm install && npm run dev`.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
 | `firmware/probes/` | Stage 1 hardware probes (screen, BLE multi-role, GPS, flash) |
-| `firmware/catch_me_app/` | Main wearable firmware modules |
+| `firmware/catch_me_app/` | Main wearable firmware modules (pet, BLE proximity, quests, tilt game) |
+| `firmware/core-patch/`, `firmware/linker/` | REQUIRED SAMD core patches (see [firmware/README.md](firmware/README.md)) |
 | `backend/` | FastAPI + SQLAlchemy + Alembic + tests + seed |
 | `web/` | React/TypeScript dashboard, live graph, shop |
 | `android/` | Kotlin/Compose companion app source |
@@ -51,11 +51,13 @@ The next approved extension is [Nearby discovery](docs/DISCOVERY_PLAN.md): Bluet
 
 ## Critical constraints
 
-- No board modifications or soldering. Remove the Wi-Fi shield from the wearable stack.
+- No board modifications or soldering. The Wi-Fi shield is out of scope.
 - Direct wearable-to-wearable Bluetooth detection is required. A phone connection is not partner-presence evidence.
-- Bluetooth peer detection alongside phone communication is **not yet verified**. Resolve this before promising live end-to-end behavior.
-- Preserve live local heart-rate display even if phone transfers must be scheduled.
-- Use two borrowed ASD2022 adapters for the heart-rate sensors; the AST2003 Pi Hat is not part of this design.
+- Location comes from **phone GPS fixes relayed with telemetry** (true fix ages; never fabricated). The wearable ASD2501 GPS shield is not part of the product.
+- The heart-rate quest is removed; records honestly report `hr_valid=false`. No pulse sensor in the required stack.
+- Quest set: `together`, `explore`, `quiz` (raid removed 14 Nov — hardware wall, see [Progress](docs/PROGRESS.md)).
+- XP/points are server-owned and awarded exactly once per completed session; the wearable owns cosmetic pet state only (daily care capped at +10 XP/user/day).
+- Show freshness/age honestly everywhere; display invalid or stale readings with their reason.
 - GLM is the implementation assistant, not a runtime dependency of the product.
 
 Documentation assumptions and pending decisions are recorded in [Progress](docs/PROGRESS.md). Do not treat planned behavior as a passed test.
