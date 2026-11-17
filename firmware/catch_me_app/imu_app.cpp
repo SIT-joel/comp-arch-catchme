@@ -12,10 +12,10 @@ const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
 // Sensitivity, in EMPIRICAL counts: on this module 1 g ~= 1024 counts
 // (boot neutrals measure |g| ~= 1033; the frozen -987 sample was a clean
 // -0.96 g mid-tilt) — NOT the 3.91 mg/LSB the BMA250E sheet suggests.
-// A tilt of theta degrees moves the axis by 1024*sin(theta), so with
-// rate-control steering: shake null band +-90 counts (~5 degrees), full
-// speed at ~35 degrees (scale 600).
-const int32_t kTiltScale = 600;                  // delta for full speed
+// The tilt is range-normalized per side (see tick), so there is no fixed
+// full-speed scale; the dead zone stays the shake null band (~5 degrees).
+const int32_t kOneG = 1024;                      // empirical counts per g
+const int32_t kMinAvail = 200;                   // per-side travel floor
 const int32_t kTiltDeadzone = 90;                // shake null band
 const int32_t kTiltActiveMin = 300;              // informational/debug only
 // On this board/shield mounting the X reading falls as the board tilts
@@ -137,7 +137,7 @@ void ImuApp::reinit(const char* why) {
   SerialLog.print(why);
   SerialLog.println(")");
   read_fails_ = 0;
-  same_x_ = 0;
+  no_new_ = 0;
   tilt_ = 0;
   tilt_active_ = false;
   Wire.end();
@@ -170,6 +170,7 @@ bool ImuApp::readAcc(int16_t &x, int16_t &y, int16_t &z) {
   x = axisRaw(d, 0);
   y = axisRaw(d, 1);
   z = axisRaw(d, 2);
+  new_data_ = d[0] & 0x01;  // BMA250 "new data" flag (X LSB bit 0)
   return true;
 }
 
@@ -184,19 +185,19 @@ void ImuApp::tick() {
     return;
   }
   read_fails_ = 0;
-  // Stale-data freeze (observed on hardware 17 Nov): the BMA250's data
-  // registers can stop updating mid-play — reads still succeed but keep
-  // returning one captured sample forever (raw pinned at -987 for
-  // minutes, feeding tilt=100 with no way back). A live sensor produces
-  // fresh conversions at 250 Hz and its 12-bit noise changes the value
-  // within a couple of reads, so 40 identical direct samples (~2 s at
-  // 20 Hz) means frozen. Re-init and re-zero.
-  if (x == last_x_) {
-    if (++same_x_ >= 40 && now - last_reinit_ms_ >= 2000) reinit("stale");
+  // Stale-data freeze (17 Nov, both boards, 19+12 recoveries): the
+  // BMA250's data registers can stop updating mid-play — reads still
+  // succeed but the value barely moves, feeding a pinned tilt forever.
+  // The sensor's own "new data" flag (set per conversion at 250 Hz,
+  // cleared on read) is the hardware truth: a live sensor shows it on
+  // every 20 Hz poll; a frozen one never does. The earlier identical-
+  // samples heuristic both missed the soft-frozen variant (its +-1
+  // wiggles reset the counter) and false-fired on parked boards.
+  if (!new_data_) {
+    if (++no_new_ >= 40 && now - last_reinit_ms_ >= 2000) reinit("nodata");
   } else {
-    same_x_ = 0;
+    no_new_ = 0;
   }
-  last_x_ = x;
   // EMA smoothing (alpha ~= 0.31 at 20 Hz) for a steady basket; the dead
   // zone absorbs the jitter this lets through, and the shorter lag keeps
   // the basket feeling attached to the hand.
@@ -205,7 +206,15 @@ void ImuApp::tick() {
   if (delta > kTiltDeadzone) delta -= kTiltDeadzone;
   else if (delta < -kTiltDeadzone) delta += kTiltDeadzone;
   else delta = 0;
-  int32_t scaled = kTiltSign * ((delta * 100) / kTiltScale);
+  // Range-normalized sensitivity: the player holds the board near
+  // vertical, so X sits at ~0.9 g and has only ~0.1 g of travel left on
+  // one side — a fixed scale made that side feel dead while the other
+  // slammed. Normalizing by the travel actually available in each
+  // direction keeps both sides even; the 3/2 gain brings full speed to a
+  // comfortable wrist arc.
+  int32_t avail = delta >= 0 ? (kOneG - neutral_x_) : (kOneG + neutral_x_);
+  if (avail < kMinAvail) avail = kMinAvail;
+  int32_t scaled = kTiltSign * ((delta * 150) / avail);
   if (scaled > 100) scaled = 100;
   if (scaled < -100) scaled = -100;
   tilt_ = (int8_t)scaled;
