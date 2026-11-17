@@ -2,6 +2,7 @@
 
 #include "ble_app.h"
 #include "config.h"
+#include "imu_app.h"
 
 #define SerialLog SerialUSB
 
@@ -454,6 +455,7 @@ const char* PetCore::game_start() {
   game_missed_ = 0;
   game_lane_ = 1;
   tilt_armed_ = true;
+  rest_tilt_ = g_imu.available() ? g_imu.tilt() : 0;  // start unbiased
   game_basket_x_ = kLaneX[1];
   for (uint8_t k = 0; k < 3; k++) {
     snack_x_[k] = -1;
@@ -478,26 +480,30 @@ void PetCore::game_move(int8_t dir) {
 }
 
 void PetCore::game_move_tilt(int8_t x) {
-  // Swipe-style lane steps (18 Nov, second iteration): one tilt gesture
-  // past +-45 steps ONE lane; the tilt must return past +-20 before the
-  // next step arms. The absolute-hold version failed on the bench: the
-  // player's comfortable hold reads a constant bias (trace: tilt +29 for
-  // a whole round), so one edge lane sat beyond wrist travel. Gestures
-  // are RELATIVE motion from wherever the hand is — bias and hold drift
-  // stop mattering, and lane 0 -> 2 is two flicks, like a swipe.
+  // Swipe-style lane steps (18 Nov, third iteration): thresholds are
+  // RELATIVE to the player's RESTING hold, not absolute level. The trace
+  // showed the rest bias sits at tilt +29 — outside the absolute +-20
+  // re-arm band — so every flick demanded an over-straightened "super
+  // sharp" return before the next one registered. The rest point is a
+  // slow EMA absorbed only while the hand is near it, so a held extreme
+  // never drags it; one flick = one lane from wherever the hand rests.
   if (!game_active_) return;
+  const int16_t off = (int16_t)x - rest_tilt_;
+  if (off > -30 && off < 30) {
+    rest_tilt_ += off / 8;  // absorb hold drift (~0.4 s settling)
+  }
   if (tilt_armed_) {
-    if (x >= 45 && game_lane_ < 2) {
+    if (off >= 45 && game_lane_ < 2) {
       game_lane_++;
       tilt_armed_ = false;
-    } else if (x <= -45 && game_lane_ > 0) {
+    } else if (off <= -45 && game_lane_ > 0) {
       game_lane_--;
       tilt_armed_ = false;
-    } else if (x >= 45 || x <= -45) {
+    } else if (off >= 45 || off <= -45) {
       tilt_armed_ = false;  // bounce off the end lane consumes the arm
     }
-  } else if (x >= -20 && x <= 20) {
-    tilt_armed_ = true;     // back near level: the next flick is armed
+  } else if (off > -20 && off < 20) {
+    tilt_armed_ = true;     // back near rest: the next flick is armed
   }
   note_activity();
 }
@@ -531,20 +537,31 @@ void PetCore::game_step(uint32_t now) {
     }
   }
 
-  // Spawning: keep up to 2 snacks falling, in a random lane.
+  // Spawning: keep up to 2 snacks falling, in a random lane, with a
+  // minimum vertical gap — a new snack waits until every existing one
+  // has fallen CM_GAME_SNACK_MIN_GAP px, so two never stack near the
+  // top (user request 18 Nov; catches stay individually reachable).
   uint8_t falling = 0;
   for (uint8_t k = 0; k < 3; k++) {
     if (snack_x_[k] >= 0) falling++;
   }
   if (falling < 2 && now >= game_next_spawn_ms_) {
+    bool clear = true;
     for (uint8_t k = 0; k < 3; k++) {
-      if (snack_x_[k] < 0) {
-        snack_x_[k] = (int8_t)kLaneX[pet_prng_next() % 3];
-        snack_y_[k] = 0;
-        break;
-      }
+      if (snack_x_[k] >= 0 && snack_y_[k] < CM_GAME_SNACK_MIN_GAP) clear = false;
     }
-    game_next_spawn_ms_ = now + 900 - (uint32_t)min(500, (int)game_caught_ * 40);
+    if (clear) {
+      for (uint8_t k = 0; k < 3; k++) {
+        if (snack_x_[k] < 0) {
+          snack_x_[k] = (int8_t)kLaneX[pet_prng_next() % 3];
+          snack_y_[k] = 0;
+          break;
+        }
+      }
+      game_next_spawn_ms_ = now + 900 - (uint32_t)min(500, (int)game_caught_ * 40);
+    } else {
+      game_next_spawn_ms_ = now + 150;  // re-check after a short gap
+    }
   }
 
   // Falling + catch/miss. Basket: 17 px wide at y=52..55.

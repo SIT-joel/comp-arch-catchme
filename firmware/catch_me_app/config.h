@@ -148,6 +148,7 @@
 
 // --- Snack Catch mini-game: 3 lanes, tilt picks the lane ---
 #define CM_GAME_STEP_MS 100UL                 // ~10 Hz step
+#define CM_GAME_SNACK_MIN_GAP 20              // min px between spawn and any snack
 #define CM_GAME_ENERGY_COST 10
 #define CM_GAME_MAX_MISSES 3
 #define CM_GAME_HAPPY_PER_CATCH 3
