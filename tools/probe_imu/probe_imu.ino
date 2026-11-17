@@ -90,9 +90,10 @@ static int16_t accAxis(uint8_t msbReg) {
   uint8_t b[2];
   if (!accReadRegs(msbReg, b, 2)) return 0;
   // 12-bit signed: MSB reg = bits 11:4, LSB reg high nibble = bits 3:0.
+  // Empirical scale on this module: 1 g ~= 1024 counts (17 Nov bench).
   int32_t v = ((int32_t)b[1] << 4) | (b[0] >> 4);
   if (v & 0x0800) v -= 0x1000;  // sign-extend
-  return (int16_t)(v * 391 / 100);  // 3.91 mg/LSB -> milli-g
+  return (int16_t)(v * 977 / 1000);  // ~0.98 mg/LSB -> milli-g
 }
 
 void loop() {
@@ -100,7 +101,7 @@ void loop() {
   // Burst 0x02..0x07: X LSB/MSB, Y LSB/MSB, Z LSB/MSB.
   uint8_t d[6];
   if (accReadRegs(0x02, d, 6)) {
-    // 12-bit signed decode (see accAxis); 3.91 mg/LSB.
+    // 12-bit signed decode (see accAxis); ~0.98 mg/LSB.
     int32_t xr = ((int32_t)d[1] << 4) | (d[0] >> 4);
     int32_t yr = ((int32_t)d[3] << 4) | (d[2] >> 4);
     int32_t zr = ((int32_t)d[5] << 4) | (d[4] >> 4);
@@ -108,11 +109,11 @@ void loop() {
     if (yr & 0x0800) yr -= 0x1000;
     if (zr & 0x0800) zr -= 0x1000;
     SerialUSB.print("mg x=");
-    SerialUSB.print(xr * 391 / 100);
+    SerialUSB.print(xr * 977 / 1000);
     SerialUSB.print(" y=");
-    SerialUSB.print(yr * 391 / 100);
+    SerialUSB.print(yr * 977 / 1000);
     SerialUSB.print(" z=");
-    SerialUSB.println(zr * 391 / 100);
+    SerialUSB.println(zr * 977 / 1000);
   }
   delay(200);
 }
