@@ -724,6 +724,12 @@ void UiApp::render_game() {
     display_.print("/");
     display_.print(CM_GAME_MAX_MISSES);
 
+    // Lane guides: dotted rails between the three lanes.
+    for (uint8_t gy = 8; gy < 50; gy += 4) {
+      display_.drawPixel(31, gy, TS_8b_Gray);
+      display_.drawPixel(63, gy, TS_8b_Gray);
+    }
+
     int8_t sx[3], sy[3];
     const uint8_t n = g_petcore.game_snacks(sx, sy, 3);
     for (uint8_t k = 0; k < n; k++) {
@@ -742,10 +748,10 @@ void UiApp::render_game() {
   display_.setCursor(0, 28);
   display_.setFont(liberationSans_8ptFontInfo);
   display_.fontColor(TS_8b_Gray, TS_8b_Black);
-  display_.print("Tilt: steer");
+  display_.print("Tilt: switch lane");
   display_.setCursor(0, 40);
   display_.fontColor(TS_8b_Yellow, TS_8b_Black);
-  display_.print("LL/LR nudge, UL: exit");
+  display_.print("LL/LR lane, UL: exit");
 }
 
 void UiApp::render_pet() {

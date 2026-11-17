@@ -69,14 +69,15 @@ class PetCore {
   bool can_play() const;         // false while sick (the pet refuses)
   void note_activity();          // any button press resets the nap timer
 
-  // --- Snack Catch mini-game (~10 Hz via wants_fast_render) ---
+  // --- Snack Catch mini-game: 3 lanes, tilt picks the lane ---
   bool game_active() const { return game_active_; }
   const char* game_start();      // NULL = started; else refusal message
-  void game_move(int8_t dir);    // -1 left / +1 right (button nudge)
-  void game_move_tilt(int8_t x); // steering speed input (rate control)
+  void game_move(int8_t dir);    // -1 / +1: one lane per button press
+  void game_move_tilt(int8_t x); // lane selector with hysteresis
   void game_quit();
   uint8_t game_caught() const { return game_caught_; }
   uint8_t game_missed() const { return game_missed_; }
+  uint8_t game_lane() const { return game_lane_; }
   int8_t game_basket_x() const { return game_basket_x_; }
   uint8_t game_snacks(int8_t* sx, int8_t* sy, uint8_t max) const;
   bool award_flash() const { return millis() < award_flash_until_ms_; }
@@ -110,9 +111,8 @@ class PetCore {
   bool game_active_ = false;
   uint8_t game_caught_ = 0;
   uint8_t game_missed_ = 0;
-  int8_t game_basket_x_ = 47;
-  int8_t game_tilt_ = 0;         // steering speed input (-100..100)
-  int16_t game_vel_rem_ = 0;     // carried fraction (px*100 per step)
+  int8_t game_basket_x_ = 48;
+  uint8_t game_lane_ = 1;        // selected lane 0..2
   uint32_t game_last_step_ms_ = 0;
   uint32_t game_next_spawn_ms_ = 0;
   int8_t snack_x_[3] = {-1, -1, -1};

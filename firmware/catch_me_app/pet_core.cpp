@@ -422,7 +422,13 @@ void PetCore::pet_stroke() {
 
 bool PetCore::can_play() const { return mood_ != PET_MOOD_SICK; }
 
-// ---- Snack Catch ----
+// ---- Snack Catch (3-lane mode, 18 Nov) ----
+// Subway-Surfers shape: three lanes, the tilt picks the lane, snacks fall
+// in a lane and you catch by being there. Discrete lanes are the right
+// interface for this accelerometer — no precision, no drift sensitivity,
+// and a sensor hiccup just leaves you in your current lane (buttons work).
+
+static const uint8_t kLaneX[3] = {16, 48, 80};  // basket/snack centers
 
 const char* PetCore::game_start() {
   if (game_active_) return NULL;
@@ -446,9 +452,8 @@ const char* PetCore::game_start() {
   game_active_ = true;
   game_caught_ = 0;
   game_missed_ = 0;
-  game_basket_x_ = 47;  // center of the on-screen clamp range 8..87
-  game_tilt_ = 0;
-  game_vel_rem_ = 0;
+  game_lane_ = 1;
+  game_basket_x_ = kLaneX[1];
   for (uint8_t k = 0; k < 3; k++) {
     snack_x_[k] = -1;
     snack_y_[k] = 0;
@@ -463,27 +468,24 @@ const char* PetCore::game_start() {
 
 void PetCore::game_move(int8_t dir) {
   if (!game_active_) return;
-  // Clamp range 8..87 keeps the whole 17 px basket sprite on the 96 px
-  // screen (drawRect(bx - 8, .., 17, ..) spans bx-8 .. bx+8). Arithmetic
-  // in int: the old uint8_t wrap (2 - 6 = 252) jumped the basket to the
-  // right edge instead of stepping left.
-  int32_t bx = (int32_t)game_basket_x_ + dir * 6;
-  if (bx < 8) bx = 8;
-  if (bx > 87) bx = 87;
-  game_basket_x_ = (uint8_t)bx;
+  // Button lane step: one press, one lane.
+  int32_t lane = (int32_t)game_lane_ + dir;
+  if (lane < 0) lane = 0;
+  if (lane > 2) lane = 2;
+  game_lane_ = (uint8_t)lane;
   note_activity();
 }
 
 void PetCore::game_move_tilt(int8_t x) {
-  // Rate-control steering (17 Nov redesign): the tilt is a SPEED input,
-  // not a position — game_step() advances the basket by up to
-  // CM_GAME_TILT_RATE_PX per step, with the fraction carried over. Slaving
-  // the position to the hand angle failed three ways: hold drift pinned
-  // the basket at a clamp edge ("sensitivity goes down after a while"),
-  // and every hand shake moved it. A tilt inside the dead zone reports 0,
-  // so shakes hold the basket still. The buttons remain instant nudges.
+  // Lane selector with hysteresis (18 Nov): commit to an edge lane past
+  // +-50, back to the center below +-20; the band between holds the last
+  // lane, so borderline jitter never flickers.
   if (!game_active_) return;
-  game_tilt_ = x;
+  uint8_t lane = game_lane_;
+  if (x <= -50) lane = 0;
+  else if (x >= 50) lane = 2;
+  else if (x >= -20 && x <= 20) lane = 1;
+  game_lane_ = lane;
   note_activity();
 }
 
@@ -505,22 +507,18 @@ void PetCore::game_step(uint32_t now) {
   if (now - game_last_step_ms_ < CM_GAME_STEP_MS) return;
   game_last_step_ms_ = now;
 
-  // Rate-control steering: speed = tilt * CM_GAME_TILT_RATE_PX / 100 px
-  // per step; the remainder accumulates so a gentle tilt still crosses
-  // the screen smoothly instead of stalling under integer rounding.
-  if (game_tilt_ != 0) {
-    const int32_t total = (int32_t)game_tilt_ * CM_GAME_TILT_RATE_PX + game_vel_rem_;
-    const int32_t step = total / 100;
-    game_vel_rem_ = (int16_t)(total % 100);
-    if (step != 0) {
-      int32_t bx = (int32_t)game_basket_x_ + step;
-      if (bx < 8) bx = 8;
-      if (bx > 87) bx = 87;
-      game_basket_x_ = (uint8_t)bx;
+  // Slide the basket toward the selected lane (6 px per step) — a quick
+  // visible move like the lane-dash games, instead of a teleport.
+  const uint8_t target = kLaneX[game_lane_];
+  if (game_basket_x_ != target) {
+    if (game_basket_x_ < target) {
+      game_basket_x_ += (uint8_t)min(6, (int)target - game_basket_x_);
+    } else {
+      game_basket_x_ -= (uint8_t)min(6, (int)game_basket_x_ - target);
     }
   }
 
-  // Spawning: keep up to 2 snacks falling.
+  // Spawning: keep up to 2 snacks falling, in a random lane.
   uint8_t falling = 0;
   for (uint8_t k = 0; k < 3; k++) {
     if (snack_x_[k] >= 0) falling++;
@@ -528,7 +526,7 @@ void PetCore::game_step(uint32_t now) {
   if (falling < 2 && now >= game_next_spawn_ms_) {
     for (uint8_t k = 0; k < 3; k++) {
       if (snack_x_[k] < 0) {
-        snack_x_[k] = 4 + (int8_t)(pet_prng_next() % 84);
+        snack_x_[k] = (int8_t)kLaneX[pet_prng_next() % 3];
         snack_y_[k] = 0;
         break;
       }
