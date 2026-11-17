@@ -16,7 +16,7 @@ const uint8_t kAccCandidates[2] = {0x18, 0x19};  // CSB selects 0/1
 // the shake null band (~5 degrees); full speed at ~35 degrees.
 const int32_t kHoldSplit = 512;   // |neutral X| above this = vertical hold
 const int32_t kTiltScale = 600;   // delta for full speed (~35 degrees)
-const int32_t kTiltDeadzone = 90; // shake null band
+const int32_t kTiltDeadzone = 60; // shake null band (~3.5 degrees)
 const int32_t kTiltActiveMin = 300;  // informational/debug only
 // Mount sign, empirically grounded: both X (15 Nov, pre-wrap deltas) and
 // Y (18 Nov user report: lane tilt inverted) read INVERTED on this

@@ -489,20 +489,23 @@ void PetCore::game_move_tilt(int8_t x) {
   // never drags it; one flick = one lane from wherever the hand rests.
   if (!game_active_) return;
   const int16_t off = (int16_t)x - rest_tilt_;
-  if (off > -30 && off < 30) {
+  if (off > -20 && off < 20) {
     rest_tilt_ += off / 8;  // absorb hold drift (~0.4 s settling)
   }
   if (tilt_armed_) {
-    if (off >= 45 && game_lane_ < 2) {
+    // Commit at 30 (~13 degrees of wrist roll from rest with the 60-count
+    // dead zone) — a casual flick, not the ~20 degrees the 45 threshold
+    // demanded ("still need to flick quite hard", 18 Nov).
+    if (off >= 30 && game_lane_ < 2) {
       game_lane_++;
       tilt_armed_ = false;
-    } else if (off <= -45 && game_lane_ > 0) {
+    } else if (off <= -30 && game_lane_ > 0) {
       game_lane_--;
       tilt_armed_ = false;
-    } else if (off >= 45 || off <= -45) {
+    } else if (off >= 30 || off <= -30) {
       tilt_armed_ = false;  // bounce off the end lane consumes the arm
     }
-  } else if (off > -20 && off < 20) {
+  } else if (off > -12 && off < 12) {
     tilt_armed_ = true;     // back near rest: the next flick is armed
   }
   note_activity();
