@@ -426,9 +426,22 @@ bool PetCore::can_play() const { return mood_ != PET_MOOD_SICK; }
 
 const char* PetCore::game_start() {
   if (game_active_) return NULL;
-  if (!can_play()) return "too sick";
+  // Refusals name the exact need AND the button that fixes it (the CARE
+  // screen shows them in red for 2.5 s) — the old single "too sick" left
+  // the player guessing whether to feed or pet. Logged for the bench.
   PetState& st = g_pet.state();
-  if (st.energy < CM_GAME_ENERGY_COST) return "too tired";
+  if (st.hunger < 25) {
+    SerialLog.print("pet_core: game refused hungry="); SerialLog.println(st.hunger);
+    return "hungry - LL feed";
+  }
+  if (st.happiness < 15) {
+    SerialLog.print("pet_core: game refused sad="); SerialLog.println(st.happiness);
+    return "sad - LR pet";
+  }
+  if (st.energy < CM_GAME_ENERGY_COST) {
+    SerialLog.print("pet_core: game refused energy="); SerialLog.println(st.energy);
+    return "tired - LL feed";
+  }
   st.energy -= CM_GAME_ENERGY_COST;
   game_active_ = true;
   game_caught_ = 0;
