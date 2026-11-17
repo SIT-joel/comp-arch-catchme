@@ -146,9 +146,8 @@
 #define CM_STROKE_AMOUNT 5                    // happiness per stroke
 #define CM_AWARD_HAPPY_BONUS 10               // happiness on quest award
 
-// --- Snack Catch mini-game (pet care; happiness only in v2) ---
+// --- Snack Catch mini-game: 3 lanes, tilt picks the lane ---
 #define CM_GAME_STEP_MS 100UL                 // ~10 Hz step
-#define CM_GAME_TILT_RATE_PX 10               // px per step at |tilt|=100
 #define CM_GAME_ENERGY_COST 10
 #define CM_GAME_MAX_MISSES 3
 #define CM_GAME_HAPPY_PER_CATCH 3
