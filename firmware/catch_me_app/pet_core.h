@@ -113,6 +113,7 @@ class PetCore {
   uint8_t game_missed_ = 0;
   int8_t game_basket_x_ = 48;
   uint8_t game_lane_ = 1;        // selected lane 0..2
+  bool tilt_armed_ = true;       // one lane step per tilt gesture
   uint32_t game_last_step_ms_ = 0;
   uint32_t game_next_spawn_ms_ = 0;
   int8_t snack_x_[3] = {-1, -1, -1};
