@@ -18,12 +18,12 @@ const int32_t kHoldSplit = 512;   // |neutral X| above this = vertical hold
 const int32_t kTiltScale = 600;   // delta for full speed (~35 degrees)
 const int32_t kTiltDeadzone = 90; // shake null band
 const int32_t kTiltActiveMin = 300;  // informational/debug only
-// Mount signs, empirically grounded: X rises when the board tilts left
-// (15 Nov, pre-wrap deltas) -> X needs -1. The same in-plane rotation
-// moves Y the opposite way -> +1. Flip here if a board ever feels
-// mirrored; the 1 Hz trace shows neutral/raw/delta for verification.
+// Mount sign, empirically grounded: both X (15 Nov, pre-wrap deltas) and
+// Y (18 Nov user report: lane tilt inverted) read INVERTED on this
+// module — the shield's Y axis is mounted anti-aligned with the assumed
+// orientation, so one sign serves both. Flip here if a board ever feels
+// mirrored; the 1 Hz trace shows the driving axis, neutral and delta.
 const int32_t kTiltSign = -1;
-const int32_t kTiltSignY = 1;
 bool i2cPresent(uint8_t addr) {
   Wire.beginTransmission(addr);
   return Wire.endTransmission() == 0;
@@ -223,7 +223,7 @@ void ImuApp::tick() {
   const bool vertical = neutral_x_ > kHoldSplit || neutral_x_ < -kHoldSplit;
   int32_t delta = vertical ? (smooth_y_ / 256 - neutral_y_)
                            : (smooth_x_ / 256 - neutral_x_);
-  const int32_t sign = vertical ? kTiltSignY : kTiltSign;
+  const int32_t sign = kTiltSign;  // both axes read inverted on this mount
   if (delta > kTiltDeadzone) delta -= kTiltDeadzone;
   else if (delta < -kTiltDeadzone) delta += kTiltDeadzone;
   else delta = 0;
