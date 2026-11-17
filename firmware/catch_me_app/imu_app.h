@@ -43,6 +43,7 @@ class ImuApp {
   int32_t neutral_x_ = 0;
   int32_t neutral_y_ = 0;
   int32_t smooth_x_ = 0;
+  int32_t smooth_y_ = 0;
   uint32_t last_read_ms_ = 0;
   uint8_t acc_addr_ = 0;
   bool new_data_ = false;       // BMA250 per-read "new data" flag
