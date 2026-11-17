@@ -7,8 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-# Full set readable by serializers — heart_challenge stays known so legacy
-# sessions keep rendering (v2 removed it from creation, see CreatableQuestId).
+# Full set readable by serializers — heart_challenge and raid stay known so
+# legacy sessions keep rendering; raid stays in CreatableQuestId so
+# create_session rejects it explicitly with 422 invalid_quest.
 QuestId = Literal["together", "explore", "heart_challenge", "raid", "quiz"]
 CreatableQuestId = Literal["together", "explore", "raid", "quiz"]
 PetSpecies = Literal["spark", "fluff", "pip"]
@@ -637,6 +638,7 @@ class SessionBrief(BaseModel):
     token: str | None
     target_ms: int | None
     progress_ms: int
+    needs_my_accept: bool = False
     interaction: InteractionSnapshot | None = None
 
 

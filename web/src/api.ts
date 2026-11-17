@@ -112,6 +112,23 @@ export interface Interaction {
   results: Record<string, unknown>;
 }
 
+export interface QuizQuestion {
+  index: number;
+  text: string;
+  options: string[];
+  answered: boolean;
+  choice: number | null;
+}
+
+export interface QuizState {
+  completed: boolean;
+  my_total: number;
+  my_answered: number;
+  partner_total: number;
+  partner_answered: number;
+  questions: QuizQuestion[];
+}
+
 export interface Reward {
   id: string;
   name: string;
@@ -272,6 +289,7 @@ export const api = {
   acceptSession: (id: string) => request<Session>("POST", `/sessions/${id}/accept`),
   cancelSession: (id: string) => request<Session>("POST", `/sessions/${id}/cancel`),
   getSession: (id: string) => request<Session>("GET", `/sessions/${id}`),
+  quiz: (id: string) => request<QuizState>("GET", `/sessions/${id}/quiz`),
   interaction: (id: string) => request<Interaction>("GET", `/sessions/${id}/interaction`),
   submitPin: (id: string, stage: "start" | "end", pin: string, codeVersion: number) =>
     request<Interaction>("POST", `/sessions/${id}/interaction/pin/submit`, {

@@ -110,7 +110,7 @@ def _condition_met(db: Session, user, achievement_id: str) -> bool:
             sessions.setdefault(answer.session_id, []).append(
                 answer.choice == question.correct_index
             )
-        return any(all(v for v in marks) and len(marks) >= 2 for marks in sessions.values())
+        return any(all(v for v in marks) and len(marks) >= 1 for marks in sessions.values())
     if achievement_id == "care_streak_3":
         pet = db.get(Pet, user.id)
         return pet is not None and pet.care_streak >= 3

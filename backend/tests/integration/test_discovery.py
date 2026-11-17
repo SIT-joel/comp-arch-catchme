@@ -62,10 +62,12 @@ def obs(client, token, captured_at):
 
 
 def provision_token(db, user, value):
+    from sqlalchemy import func
     from app.models import Device, DiscoveryToken
 
+    next_alias = (db.query(func.max(Device.firmware_alias)).scalar() or 100) + 1
     device = Device(
-        id=uuid.uuid4(), name=f"W-{user.username}", firmware_alias=abs(hash(user.username)) % 1000,
+        id=uuid.uuid4(), name=f"W-{user.username}", firmware_alias=next_alias,
         owner_user_id=user.id,
     )
     db.add(device)

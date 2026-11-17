@@ -147,3 +147,46 @@ def test_quiz_choice_validation(clients):
         json={"question_index": 99, "choice": 1},
     )
     assert missing.status_code == 404
+
+
+def test_quiz_requires_interests_for_both_partners(clients):
+    r = clients["a"].post("/api/v1/sessions", json={"quest_id": "quiz", "demo": True})
+    assert r.status_code == 409, r.text
+    assert r.json()["error"]["code"] == "quiz_interests_required"
+
+
+def test_quiz_completion_unlocks_achievements_and_bumps_state_version(clients, seeded_pair, db_session):
+    from app.models import QuizQuestion
+
+    _set_interests(clients["a"], ["gaming"])
+    _set_interests(clients["b"], ["travel"])
+    created = clients["a"].post("/api/v1/sessions", json={"quest_id": "quiz", "demo": True})
+    assert created.status_code == 201, created.text
+    sid = created.json()["id"]
+    assert clients["b"].post(f"/api/v1/sessions/{sid}/accept").status_code == 200
+
+    v_before = clients["a"].get(f"/api/v1/devices/{clients['a_device']}/state").json()["state_version"]
+
+    # Answer every question with the exact server-stored correct_index.
+    for key, uid in (("a", seeded_pair["a"]["user"].id), ("b", seeded_pair["b"]["user"].id)):
+        qs = (
+            db_session.query(QuizQuestion)
+            .filter(QuizQuestion.session_id == sid, QuizQuestion.answerer_user_id == uid)
+            .order_by(QuizQuestion.question_index)
+            .all()
+        )
+        for q in qs:
+            res = clients[key].post(
+                f"/api/v1/sessions/{sid}/quiz/answer",
+                json={"question_index": q.question_index, "choice": q.correct_index},
+            )
+            assert res.status_code == 200, res.text
+
+    v_after = clients["a"].get(f"/api/v1/devices/{clients['a_device']}/state").json()["state_version"]
+    assert v_after > v_before
+
+    for key in ("a", "b"):
+        items = clients[key].get("/api/v1/achievements").json()["achievements"]
+        unlocked = {i["id"]: i["unlocked"] for i in items}
+        assert unlocked["quiz_1"] is True
+        assert unlocked["quiz_ace"] is True

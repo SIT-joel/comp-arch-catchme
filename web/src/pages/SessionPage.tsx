@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api, Interaction, Me, Reading, Session } from "../api";
+import { api, Interaction, Me, QuizState, Reading, Session } from "../api";
 import { buildSegments, formatDuration, GraphPoint } from "../graph";
 
 const WINDOW_S = 60;
@@ -86,6 +86,7 @@ export default function SessionPage({ me, refreshMe }: { me: Me; refreshMe: () =
   const [session, setSession] = useState<Session | null>(null);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [interactionError, setInteractionError] = useState<string | null>(null);
+  const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [readings, setReadings] = useState<Reading[]>([]);
   const [pinInput, setPinInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +98,15 @@ export default function SessionPage({ me, refreshMe }: { me: Me; refreshMe: () =
       const [s, r] = await Promise.all([api.getSession(id), api.readings(id)]);
       setSession(s);
       setReadings(r.readings);
+      if (s.quest_id === "quiz" && (s.state === "active" || s.state === "completed")) {
+        try {
+          setQuizState(await api.quiz(id));
+        } catch {
+          setQuizState(null);
+        }
+      } else {
+        setQuizState(null);
+      }
       try {
         setInteraction(await api.interaction(id));
         setInteractionError(null);
@@ -173,7 +183,9 @@ export default function SessionPage({ me, refreshMe }: { me: Me; refreshMe: () =
     setPinInput("");
   };
 
-  const title = session.quest_id === "heart_challenge" ? "Keep Your Cool" :
+  const title = session.quest_id === "heart_challenge" ? "Keep Your Cool (removed)" :
+    session.quest_id === "raid" ? "Landmark Raid (removed)" :
+    session.quest_id === "quiz" ? "Know Your Partner" :
     session.quest_id === "together" ? "Together Time" : "Outdoor Visit";
   const baseline = (interaction?.results.baseline ?? {}) as Record<string, number>;
   const rounds = (interaction?.results.rounds ?? {}) as Record<string, Record<string, number>>;
@@ -304,22 +316,40 @@ export default function SessionPage({ me, refreshMe }: { me: Me; refreshMe: () =
         </section>
       )}
 
-      <section className="card">
-        <h2>{session.quest_id === "heart_challenge" ? "Keep Your Cool · live heart rate" : "Live heart rate"}</h2>
-        <p className="muted small">
-          Pink = you, blue = {partner?.display_name ?? "partner"}. Gaps mean missing or invalid readings — they are
-          never interpolated. Heart rate is a playful sensor value, not a measure of attraction.
-        </p>
-        <HeartGraph readings={readings} selfId={me.user.id} />
-        <div className="row gap">
-          <div className={`sensor-chip ${latestSelf?.heart_rate.valid ? "ok" : "bad"}`}>
-            you: {latestSelf ? statusLabel(latestSelf) : "no data"}
+      {session.quest_id === "quiz" && quizState && (session.state === "active" || session.state === "completed") && (
+        <section className="card">
+          <h2>Know Your Partner</h2>
+          <p className="muted">
+            You answered {quizState.my_answered}/{quizState.my_total} · Partner answered{" "}
+            {quizState.partner_answered}/{quizState.partner_total}. Answer questions on the Android app using your
+            wearable A–D buttons.
+          </p>
+          {quizState.questions.map((q) => (
+            <div key={q.index} className="muted small">
+              Q{q.index + 1}: {q.text} — {q.answered && q.choice !== null ? `Selected ${String.fromCharCode(65 + q.choice)} (${q.options[q.choice] ?? ""})` : "Unanswered"}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {session.quest_id === "heart_challenge" && (
+        <section className="card">
+          <h2>Keep Your Cool · live heart rate (removed v1 quest)</h2>
+          <p className="muted small">
+            Pink = you, blue = {partner?.display_name ?? "partner"}. Gaps mean missing or invalid readings — they are
+            never interpolated. Heart rate is a playful sensor value, not a measure of attraction.
+          </p>
+          <HeartGraph readings={readings} selfId={me.user.id} />
+          <div className="row gap">
+            <div className={`sensor-chip ${latestSelf?.heart_rate.valid ? "ok" : "bad"}`}>
+              you: {latestSelf ? statusLabel(latestSelf) : "no data"}
+            </div>
+            <div className={`sensor-chip ${latestPartner?.heart_rate.valid ? "ok" : "bad"}`}>
+              partner: {latestPartner ? statusLabel(latestPartner) : "no data"}
+            </div>
           </div>
-          <div className={`sensor-chip ${latestPartner?.heart_rate.valid ? "ok" : "bad"}`}>
-            partner: {latestPartner ? statusLabel(latestPartner) : "no data"}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
     </main>
   );
 }

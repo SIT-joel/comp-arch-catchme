@@ -65,6 +65,19 @@ def bind_device(
 
 
 def _session_brief(quest_session: QuestSession, db: Session, user_id: uuid.UUID) -> SessionBrief:
+    me_participant = (
+        db.query(SessionParticipant)
+        .filter(
+            SessionParticipant.session_id == quest_session.id,
+            SessionParticipant.user_id == user_id,
+        )
+        .one_or_none()
+    )
+    needs_my_accept = bool(
+        quest_session.state == "pending"
+        and me_participant is not None
+        and me_participant.accepted_at is None
+    )
     return SessionBrief(
         session_id=quest_session.id,
         quest_id=quest_session.quest_id,
@@ -73,6 +86,7 @@ def _session_brief(quest_session: QuestSession, db: Session, user_id: uuid.UUID)
         token=quest_session.session_token,
         target_ms=quest_session.target_ms,
         progress_ms=quest_session.progress_ms,
+        needs_my_accept=needs_my_accept,
         interaction=interaction_snapshot(db, quest_session, user_id),
     )
 

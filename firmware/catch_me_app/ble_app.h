@@ -48,6 +48,7 @@
 #define MSG_RAID_START 22          // phone -> w
 #define MSG_QUIZ_STATE 23          // phone -> wearable: quiz progress [ver][active][idx][total]
 #define MSG_QUIZ_ANSWER 24         // wearable -> phone: A-D press [ver][idx][choice]
+#define MSG_PET_IDENTITY 25        // wearable -> phone: bonded cosmetic pet [ver][species][nameLen][nonce LE64][name<=8]
 
 struct PeerObservation {
   uint8_t device;         // peer DEVICE_ID

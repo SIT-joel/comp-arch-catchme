@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, Landmark, Me, Quest, Session } from "../api";
+import { api, Me, Quest, Session } from "../api";
 import { formatDuration } from "../graph";
 
 function useSse(onChange: () => void) {
@@ -20,7 +20,7 @@ function useSse(onChange: () => void) {
 function questName(id: Session["quest_id"]): string {
   if (id === "together") return "Together Time";
   if (id === "explore") return "Outdoor Visit";
-  if (id === "raid") return "Landmark Raid";
+  if (id === "raid") return "Landmark Raid (removed)";
   if (id === "quiz") return "Know Your Partner";
   return "Keep Your Cool (removed)"; // legacy sessions only
 }
@@ -31,18 +31,15 @@ const STAGE_LABEL: Record<number, string> = { 1: "baby", 2: "teen", 3: "adult" }
 export default function DashboardPage({ me, refreshMe }: { me: Me; refreshMe: () => Promise<void> }) {
   const [quests, setQuests] = useState<Quest[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [landmarks, setLandmarks] = useState<Landmark[]>([]);
-  const [landmarkId, setLandmarkId] = useState<string>("");
   const [demoMode, setDemoMode] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const refresh = useCallback(async () => {
-    const [q, s, l] = await Promise.all([api.quests(), api.listSessions(), api.landmarks()]);
+    const [q, s] = await Promise.all([api.quests(), api.listSessions()]);
     setQuests(q.quests);
     setSessions(s.sessions);
-    setLandmarks(l.landmarks);
     await refreshMe();
   }, [refreshMe]);
 
@@ -59,11 +56,7 @@ export default function DashboardPage({ me, refreshMe }: { me: Me; refreshMe: ()
     setError(null);
     setMessage(null);
     try {
-      const created = await api.createSession(
-        questId,
-        demoMode,
-        questId === "raid" ? landmarkId || undefined : undefined,
-      );
+      const created = await api.createSession(questId, demoMode);
       setMessage("Invitation sent — waiting for your partner to accept.");
       navigate(`/sessions/${created.id}`);
     } catch (err) {
@@ -200,24 +193,10 @@ export default function DashboardPage({ me, refreshMe }: { me: Me; refreshMe: ()
               {q.quest_id === "explore" && !q.geofence_configured && (
                 <p className="warning">Geofence not configured on the server — explore cannot start yet.</p>
               )}
-              {q.quest_id === "raid" && (
-                <label className="check-row">
-                  Landmark:{" "}
-                  <select value={landmarkId} onChange={(e) => setLandmarkId(e.target.value)}>
-                    <option value="">Choose…</option>
-                    {landmarks.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
               <button
                 disabled={
                   !!current ||
-                  (q.quest_id === "explore" && !q.geofence_configured) ||
-                  (q.quest_id === "raid" && !landmarkId)
+                  (q.quest_id === "explore" && !q.geofence_configured)
                 }
                 onClick={() => startQuest(q.quest_id)}
               >
