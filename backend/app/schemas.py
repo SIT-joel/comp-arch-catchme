@@ -359,21 +359,25 @@ class SessionOut(BaseModel):
 
 
 class QuizQuestionOut(BaseModel):
-    """One question as the answerer sees it: no correct index (server-scored)."""
+    """One question as the answerer sees it: right_index/is_correct stay null until answered/completed."""
 
     index: int
     text: str
     options: list[str]
     answered: bool
     choice: int | None = None
+    is_correct: bool | None = None
+    right_index: int | None = None
 
 
 class QuizStateOut(BaseModel):
     completed: bool
     my_total: int
     my_answered: int
+    my_correct: int = 0
     partner_total: int
     partner_answered: int
+    partner_correct: int = 0
     questions: list[QuizQuestionOut]
 
 

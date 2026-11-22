@@ -199,13 +199,15 @@ export default function SessionPage({ me, refreshMe }: { me: Me; refreshMe: () =
           {title} · {session.state}
           {session.demo && <span className="tag demo-tag">demo</span>}
         </h2>
-        <div className="progress-row">
-          <progress max={session.target_ms ?? 1} value={session.progress_ms} />
-          <span>
-            {formatDuration(session.progress_ms)} /{" "}
-            {session.target_ms ? formatDuration(session.target_ms) : "not active yet"}
-          </span>
-        </div>
+        {session.quest_id !== "quiz" && (
+          <div className="progress-row">
+            <progress max={session.target_ms ?? 1} value={session.progress_ms} />
+            <span>
+              {formatDuration(session.progress_ms)} /{" "}
+              {session.target_ms ? formatDuration(session.target_ms) : "not active yet"}
+            </span>
+          </div>
+        )}
         <p className="muted">
           Participants: {session.participants.map((p) => `${p.display_name}${p.accepted ? "" : " (invited)"}`).join(", ")}
         </p>
@@ -320,15 +322,29 @@ export default function SessionPage({ me, refreshMe }: { me: Me; refreshMe: () =
         <section className="card">
           <h2>Know Your Partner</h2>
           <p className="muted">
-            You answered {quizState.my_answered}/{quizState.my_total} · Partner answered{" "}
-            {quizState.partner_answered}/{quizState.partner_total}. Answer questions on the Android app using your
-            wearable A–D buttons.
+            You answered {quizState.my_answered}/{quizState.my_total}
+            {typeof quizState.my_correct === "number" ? ` (${quizState.my_correct} right)` : ""} · Partner{" "}
+            {quizState.partner_answered}/{quizState.partner_total}
+            {typeof quizState.partner_correct === "number" ? ` (${quizState.partner_correct} right)` : ""}. Answer
+            questions on the Android app using your wearable A–D buttons.
           </p>
-          {quizState.questions.map((q) => (
-            <div key={q.index} className="muted small">
-              Q{q.index + 1}: {q.text} — {q.answered && q.choice !== null ? `Selected ${String.fromCharCode(65 + q.choice)} (${q.options[q.choice] ?? ""})` : "Unanswered"}
-            </div>
-          ))}
+          {quizState.questions.map((q) => {
+            const picked = q.choice !== null ? `${String.fromCharCode(65 + q.choice)} (${q.options[q.choice] ?? ""})` : "";
+            const right =
+              q.right_index !== null && q.right_index !== undefined
+                ? `${String.fromCharCode(65 + q.right_index)} (${q.options[q.right_index] ?? ""})`
+                : "";
+            return (
+              <div key={q.index} className="muted small">
+                Q{q.index + 1}: {q.text} —{" "}
+                {q.answered && q.choice !== null
+                  ? `${q.is_correct ? "✓ Right" : "✗ Wrong"}: ${picked}${!q.is_correct && right ? ` (Right: ${right})` : ""}`
+                  : right
+                  ? `Unanswered (Right: ${right})`
+                  : "Unanswered"}
+              </div>
+            );
+          })}
         </section>
       )}
 

@@ -143,7 +143,11 @@ def device_state(
             )
 
     # Current non-terminal session of this user (one active shared quest per pair).
-    participation = (
+    from app.config import get_settings
+    from app.routers.sessions import expire_pending_if_stale
+
+    expiry_seconds = get_settings().invitation_expiry_seconds
+    candidates = (
         db.query(SessionParticipant, QuestSession)
         .join(QuestSession, QuestSession.id == SessionParticipant.session_id)
         .filter(
@@ -151,8 +155,14 @@ def device_state(
             QuestSession.state.in_(("pending", "active")),
         )
         .order_by(QuestSession.created_at.desc())
-        .first()
+        .all()
     )
+    participation = None
+    for row in candidates:
+        if expire_pending_if_stale(db, row.QuestSession, expiry_seconds):
+            continue
+        participation = row
+        break
     brief = _session_brief(participation.QuestSession, db, user.id) if participation else None
 
     completion = None

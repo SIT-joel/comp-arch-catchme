@@ -45,6 +45,7 @@ object Frame {
     const val MSG_QUIZ_STATE = 23
     const val MSG_QUIZ_ANSWER = 24
     const val MSG_PET_IDENTITY = 25
+    const val MSG_GPS_STATE = 26
 
     fun crc8(data: ByteArray, n: Int): Int = crc8(data, n, 0x00)
 

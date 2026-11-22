@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -56,9 +58,9 @@ class MainActivity : ComponentActivity() {
         // Values are trimmed: CRLF .env endings otherwise leak control chars
         // into the headers and Cloudflare Access rejects them (verified).
         val apiPrefs = getSharedPreferences("api", MODE_PRIVATE)
-        val extraBase = intent?.getStringExtra("api_base")
-        val extraId = intent?.getStringExtra("cf_id")?.trim()
-        val extraSecret = intent?.getStringExtra("cf_secret")?.trim()
+        val extraBase = intent?.getStringExtra("api_base")?.trim()?.takeIf { it.isNotEmpty() }
+        val extraId = intent?.getStringExtra("cf_id")?.trim()?.takeIf { it.isNotEmpty() }
+        val extraSecret = intent?.getStringExtra("cf_secret")?.trim()?.takeIf { it.isNotEmpty() }
         if (extraBase != null || extraId != null) {
             apiPrefs.edit()
                 .putString("api_base", extraBase ?: apiPrefs.getString("api_base", null))
@@ -66,10 +68,20 @@ class MainActivity : ComponentActivity() {
                 .putString("cf_secret", extraSecret ?: apiPrefs.getString("cf_secret", null))
                 .apply()
         }
-        val apiBase = extraBase ?: apiPrefs.getString("api_base", null) ?: BuildConfig.API_BASE
+        val savedBase = apiPrefs.getString("api_base", null)?.trim()?.takeIf { it.isNotEmpty() }
+        val apiBase = extraBase
+            ?: if (savedBase != null && (savedBase.startsWith("https://") || !BuildConfig.API_BASE.startsWith("https://"))) {
+                savedBase
+            } else {
+                BuildConfig.API_BASE
+            }
         model = AppModel(this, apiBase)
-        model.api.accessId = extraId ?: apiPrefs.getString("cf_id", null) ?: BuildConfig.CF_ACCESS_ID
-        model.api.accessSecret = extraSecret ?: apiPrefs.getString("cf_secret", null) ?: BuildConfig.CF_ACCESS_SECRET
+        model.api.accessId = extraId
+            ?: apiPrefs.getString("cf_id", null)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: BuildConfig.CF_ACCESS_ID
+        model.api.accessSecret = extraSecret
+            ?: apiPrefs.getString("cf_secret", null)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: BuildConfig.CF_ACCESS_SECRET
         requestBlePermissions()
         // Auto-start the wearable link after every launch (14 Nov): the app
         // restores the session and connects without on-screen taps — the GPS
@@ -104,7 +116,10 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Discovery polls only while the screen is visible (5 s cadence).
         model.screenVisible = true
-        model.refreshDiscoveryState()
+        if (model.ui.value.signedIn) {
+            model.refreshDiscoveryState()
+            model.refreshDeviceState()
+        }
     }
 
     override fun onPause() {
@@ -144,6 +159,8 @@ fun LoginScreen(model: AppModel) {
         Button(onClick = {
             model.login(username, password) { ok, msg -> if (!ok) error = msg }
         }) { Text("Sign in") }
+        Spacer(Modifier.height(12.dp))
+        Text("Server: ${model.api.baseUrl}", style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -156,6 +173,25 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Catch Me — ${ui.username ?: ""}", style = MaterialTheme.typography.titleLarge)
+        Text("Server: ${model.api.baseUrl}", style = MaterialTheme.typography.bodySmall)
+        ui.proximityAlert?.let { alertMsg ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Bluetooth Proximity Alert",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    Text(
+                        alertMsg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+            }
+        }
         if (demoMode) Text("DEMO MODE", color = MaterialTheme.colorScheme.tertiary)
 
         Card {
@@ -200,12 +236,6 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
             }
         }
 
-        // v2 'Know Your Partner' quiz: the phone shows the question, the
-        // wearable is the A-D pad (UL=A UR=B LL=C LR=D).
-        if (ui.quiz != null && (ui.quiz.active || ui.quiz.completed)) {
-            QuizCard(model, ui.quiz)
-        }
-
         // Achievement unlock banner (15 Nov): the newest unlock shows for a
         // few seconds before the card takes over — the friend-journey reward.
         ui.newAchievement?.let { name ->
@@ -232,7 +262,12 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Pet")
                     val species = if (pet.isNull("species")) "" else pet.optString("species", "")
-                    val petName = if (pet.isNull("name")) species else pet.optString("name", species)
+                    val rawPetName = if (pet.isNull("name")) "" else pet.optString("name", "")
+                    val petName = if (rawPetName.isBlank() || rawPetName.equals("null", ignoreCase = true)) {
+                        species.replaceFirstChar { it.uppercase() }
+                    } else {
+                        rawPetName
+                    }
                     val stage = pet.optInt("evolution_stage", 1)
                     val stageLabel = when (stage) { 2 -> "teen"; 3 -> "adult"; else -> "baby" }
                     if (species.isBlank()) {
@@ -249,10 +284,27 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
             }
         }
 
+        // v2 'Know Your Partner' quiz: placed adjacent to Quests so tapping Quiz
+        // keeps the live question + A-D options in view without scrolling up.
+        if (ui.quiz != null && (ui.quiz.active || ui.quiz.completed || ui.quiz.myAnswered > 0)) {
+            QuizCard(model, ui.quiz)
+        }
+
         var questError by remember { mutableStateOf<String?>(null) }
+        var questBusy by remember { mutableStateOf(false) }
         Card {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Quests")
+                val fix = ui.gpsFix
+                val fixAgeSec = fix?.let { ((System.currentTimeMillis() - it.fixTimeMs).coerceAtLeast(0L) / 1000L) }
+                Text(
+                    if (fix != null) {
+                        "Phone GPS: ${String.format(Locale.US, "%.5f, %.5f", fix.latitude, fix.longitude)} (${fixAgeSec}s ago)"
+                    } else {
+                        "Phone GPS: acquiring fix…"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 ui.activeSession?.let { active ->
                     val qTitle = when (active.questId) {
                         "together" -> "Together Time"
@@ -264,30 +316,77 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                         "$qTitle · ${active.state}${if (active.demo) " (demo)" else ""}",
                         style = MaterialTheme.typography.titleSmall,
                     )
-                    if (active.targetMs != null && active.targetMs > 0) {
+                    if (active.questId == "explore") {
+                        Text(
+                            if (fix != null) {
+                                "Your GPS: ${String.format(Locale.US, "%.5f, %.5f", fix.latitude, fix.longitude)} (age ${fixAgeSec}s)"
+                            } else {
+                                "Your GPS: no fix yet (indoors)"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (active.demo) {
+                            Text(
+                                "Demo indoor view: live GPS coordinates shown on phone & TinyScreen+",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                    active.interactionSummary?.let { summary ->
+                        Text(summary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    ui.proximityAlert?.let { alertMsg ->
+                        Text(
+                            "⚠ $alertMsg",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (active.questId == "quiz") {
+                        val quizState = ui.quiz
+                        if (quizState != null) {
+                            Text(
+                                "Answered ${quizState.myAnswered}/${quizState.myTotal} questions · ${quizState.myCorrect} right",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    } else if (active.targetMs != null && active.targetMs > 0) {
                         val frac = (active.progressMs.toFloat() / active.targetMs.toFloat()).coerceIn(0f, 1f)
+                        val remSec = ((active.targetMs - active.progressMs).coerceAtLeast(0L) + 999L) / 1000L
                         LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
-                        Text("${active.progressMs / 1000}s / ${active.targetMs / 1000}s",
-                            style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "${remSec}s left (${active.progressMs / 1000}s / ${active.targetMs / 1000}s)",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                     if (active.state == "pending" && !active.needsMyAccept) {
                         Text("Waiting for partner to accept…", style = MaterialTheme.typography.bodySmall)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (active.state == "pending" && active.needsMyAccept) {
-                            Button(onClick = {
+                            Button(
+                                enabled = !questBusy,
+                                onClick = {
+                                    questBusy = true
+                                    questError = null
+                                    model.acceptSession(active.sessionId) { ok, err ->
+                                        questBusy = false
+                                        if (!ok) questError = err
+                                    }
+                                },
+                            ) { Text("Accept") }
+                        }
+                        Button(
+                            enabled = !questBusy,
+                            onClick = {
+                                questBusy = true
                                 questError = null
-                                model.acceptSession(active.sessionId) { ok, err ->
+                                model.cancelSession(active.sessionId) { ok, err ->
+                                    questBusy = false
                                     if (!ok) questError = err
                                 }
-                            }) { Text("Accept") }
-                        }
-                        Button(onClick = {
-                            questError = null
-                            model.cancelSession(active.sessionId) { ok, err ->
-                                if (!ok) questError = err
-                            }
-                        }) { Text("Cancel") }
+                            },
+                        ) { Text("Cancel") }
                     }
                 }
                 Row {
@@ -296,10 +395,12 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        enabled = ui.activeSession == null,
+                        enabled = ui.activeSession == null && !questBusy,
                         onClick = {
+                            questBusy = true
                             questError = null
                             model.questAction("together", demoMode) { ok, err ->
+                                questBusy = false
                                 if (!ok) questError = err
                             }
                         },
@@ -307,10 +408,12 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                         Text("Together")
                     }
                     Button(
-                        enabled = ui.activeSession == null,
+                        enabled = ui.activeSession == null && !questBusy,
                         onClick = {
+                            questBusy = true
                             questError = null
                             model.questAction("explore", demoMode) { ok, err ->
+                                questBusy = false
                                 if (!ok) questError = err
                             }
                         },
@@ -318,16 +421,24 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                         Text("Explore")
                     }
                     Button(
-                        enabled = ui.activeSession == null,
+                        enabled = ui.activeSession == null && !questBusy,
                         onClick = {
+                            questBusy = true
                             questError = null
                             model.questAction("quiz", demoMode) { ok, err ->
+                                questBusy = false
                                 if (!ok) questError = err
                             }
                         },
                     ) {
                         Text("Quiz")
                     }
+                }
+                if (questBusy) {
+                    Text("Sending quest request…", style = MaterialTheme.typography.bodySmall)
+                } else if (ui.activeSession != null) {
+                    Text("Cancel or finish current quest before starting a new one.",
+                        style = MaterialTheme.typography.bodySmall)
                 }
                 questError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -384,7 +495,33 @@ fun QuizCard(model: AppModel, quiz: AppModel.QuizView) {
             if (quiz.completed) {
                 Text("Quiz complete! +100 points & XP each",
                     color = MaterialTheme.colorScheme.primary)
-                Text("You ${quiz.myAnswered}/${quiz.myTotal} answered · partner ${quiz.partnerAnswered}/${quiz.partnerTotal}")
+                Text(
+                    "Your score: ${quiz.myCorrect}/${quiz.myTotal} right · Partner: ${quiz.partnerCorrect}/${quiz.partnerTotal} right",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                quiz.results.forEach { q ->
+                    val chosenStr = q.choice?.let { "${'A' + it}: ${q.options.getOrNull(it) ?: ""}" } ?: "Unanswered"
+                    val rightStr = q.rightIndex?.let { "${'A' + it}: ${q.options.getOrNull(it) ?: ""}" }
+                    if (q.isCorrect == true) {
+                        Text(
+                            "Q${q.index + 1}: ✓ $chosenStr (Right!)",
+                            color = MaterialTheme.colorScheme.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        Text(
+                            "Q${q.index + 1}: ✗ You picked $chosenStr" +
+                                if (rightStr != null) " · Right: $rightStr" else "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            } else if (quiz.index < 0) {
+                Text(
+                    "All ${quiz.myTotal} answered (${quiz.myCorrect} right) · waiting for partner (${quiz.partnerAnswered}/${quiz.partnerTotal})…",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             } else {
                 Text("Q${quiz.index + 1}/${quiz.total}: ${quiz.question ?: "..."}")
                 quiz.options.forEachIndexed { i, opt ->
@@ -398,9 +535,20 @@ fun QuizCard(model: AppModel, quiz: AppModel.QuizView) {
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    "You ${quiz.myAnswered}/${quiz.myTotal} · partner ${quiz.partnerAnswered}/${quiz.partnerTotal}",
+                    "You ${quiz.myAnswered}/${quiz.myTotal} (${quiz.myCorrect} right) · partner ${quiz.partnerAnswered}/${quiz.partnerTotal}",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                quiz.results.filter { it.answered }.forEach { q ->
+                    val chosenStr = q.choice?.let { "${'A' + it}: ${q.options.getOrNull(it) ?: ""}" } ?: ""
+                    val rightStr = q.rightIndex?.let { "${'A' + it}: ${q.options.getOrNull(it) ?: ""}" }
+                    Text(
+                        if (q.isCorrect == true) "Q${q.index + 1}: ✓ $chosenStr"
+                        else "Q${q.index + 1}: ✗ $chosenStr" + if (rightStr != null) " (Right: $rightStr)" else "",
+                        color = if (q.isCorrect == true) MaterialTheme.colorScheme.secondary
+                                else MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 quiz.lastError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall)

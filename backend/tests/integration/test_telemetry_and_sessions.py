@@ -493,3 +493,23 @@ def test_one_sided_evidence_never_completes(clients):
     state = clients["a"].get(f"/api/v1/sessions/{session['id']}").json()
     assert state["state"] == "active"
     assert state["progress_ms"] == 0
+
+
+def test_expired_pending_invitation_unblocks_creation_and_device_state(clients, db_session):
+    from app.models import QuestSession
+
+    created = clients["a"].post("/api/v1/sessions", json={"quest_id": "together", "demo": True})
+    assert created.status_code == 201, created.text
+    sid = uuid.UUID(created.json()["id"])
+
+    row = db_session.get(QuestSession, sid)
+    row.created_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    db_session.commit()
+
+    ds = clients["b"].get(f"/api/v1/devices/{clients['b_device']}/state")
+    assert ds.status_code == 200
+    assert ds.json()["session"] is None
+
+    fresh = clients["a"].post("/api/v1/sessions", json={"quest_id": "together", "demo": True})
+    assert fresh.status_code == 201, fresh.text
+    clients["a"].post(f"/api/v1/sessions/{fresh.json()['id']}/cancel")

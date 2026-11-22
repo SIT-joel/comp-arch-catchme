@@ -121,6 +121,9 @@ void build_discovery_adv(uint8_t* out, uint16_t token) {
 static uint8_t rx_msg_buf[64];
 static uint16_t rx_msg_len = 0;
 static uint8_t rx_msg_frags_left = 0;
+static uint8_t rx_msg_id = 0;
+static uint8_t rx_msg_type = 0;
+static uint8_t rx_msg_next_frag = 0;
 
 // ---------------- BleApp ------------------------------------------------------
 
@@ -222,23 +225,26 @@ void BleApp::rotate_advertising_payload() {
   }
 }
 
-void BleApp::start_advertising() {
+void BleApp::start_advertising(bool connectable) {
   // Library convention (verified on hardware): aci_gap_set_discoverable takes
   // a LOCAL NAME and builds the AD itself; the payload then goes through
   // aci_gap_update_adv_data in standard [len][type][data] format (rotate_-
   // advertising_payload). set_discoverable is the wedge-sensitive call —
   // call it once per phase entry, never in a loop (gate lesson, 6 Nov).
-  char name[12];
-  snprintf(name, sizeof(name), "CATCHME-%d", DEVICE_ID);
-  uint8_t nameLen = strlen(name);
-  // Name in the scan response (space budget); active scanners still see it.
-  uint8_t nameAd[11];
-  nameAd[0] = (uint8_t)(1 + nameLen);
-  nameAd[1] = AD_TYPE_COMPLETE_LOCAL_NAME;
-  memcpy(nameAd + 2, name, nameLen);
-  hci_le_set_scan_resp_data((uint8_t)(1 + nameLen), nameAd);
+  if (connectable) {
+    char name[12];
+    snprintf(name, sizeof(name), "CATCHME-%d", DEVICE_ID);
+    uint8_t nameLen = strlen(name);
+    // Name in the scan response (space budget); active scanners still see it.
+    uint8_t nameAd[11];
+    nameAd[0] = (uint8_t)(1 + nameLen);
+    nameAd[1] = AD_TYPE_COMPLETE_LOCAL_NAME;
+    memcpy(nameAd + 2, name, nameLen);
+    hci_le_set_scan_resp_data((uint8_t)(1 + nameLen), nameAd);
+  }
   tBleStatus ret = aci_gap_set_discoverable(
-      ADV_IND, (CM_ADV_INTERVAL_MIN_MS * 1000) / 625, (CM_ADV_INTERVAL_MAX_MS * 1000) / 625,
+      connectable ? ADV_IND : ADV_NONCONN_IND,
+      (CM_ADV_INTERVAL_MIN_MS * 1000) / 625, (CM_ADV_INTERVAL_MAX_MS * 1000) / 625,
       PUBLIC_ADDR, NO_WHITE_LIST_USE, 0, NULL, 0, NULL, 0, 0);
   if (ret != BLE_STATUS_SUCCESS) {
     SerialLog.print("ble: set_discoverable fail 0x");
@@ -249,6 +255,8 @@ void BleApp::start_advertising() {
 }
 
 void BleApp::restart_discovery() {
+  need_scan_start_ = false;
+  scan_last_retry_ms_ = millis();
   tBleStatus ret = aci_gap_start_general_discovery_proc(CM_SCAN_INTERVAL, CM_SCAN_WINDOW,
                                                         PUBLIC_ADDR, 0);
   if (ret != BLE_STATUS_SUCCESS) {
@@ -258,7 +266,7 @@ void BleApp::restart_discovery() {
     discovery_running_ = 1;
     SerialLog.println("ble: discovery started");
   }
-  last_discovery_ms_ = millis();
+  last_discovery_ms_ = scan_last_retry_ms_;
 }
 
 void BleApp::note_advertisement(uint8_t* data, uint8_t len, int8_t rssi) {
@@ -435,11 +443,16 @@ void BleApp::note_connect(uint16_t handle, uint8_t role, const uint8_t* bdaddr) 
   (void)bdaddr;
   if (role == 1) {  // we are peripheral: the phone connected
     phone_connected_ = true;
+    cccd_ready_ = false;
+    connected_at_ms_ = millis();
+    last_phone_connected_ms_ = connected_at_ms_;
     conn_handle_ = handle;
     radio_state_ = RadioState::LINKED;
     state_started_ms_ = millis();
     cdiag::bc(cdiag::B_PHONE_UP, role, handle);
     link_terminate_sent_ = false;  // fresh link: re-arm the drop timer
+    need_pre_adv_start_ = false;
+    need_scan_start_ = false;
     SerialLog.println("ble: phone connected");
 #if CM_GAME_GATE
   } else {
@@ -474,19 +487,39 @@ void BleApp::note_disconnect(uint16_t handle, uint8_t reason) {
   // stalling the outcome relay until the phone's next reconnect.
   if (handle == conn_handle_) {
     phone_connected_ = false;
+    cccd_ready_ = false;
+    last_phone_connected_ms_ = millis();
     conn_handle_ = 0;
   }
   rx_msg_frags_left = 0;
   rx_msg_len = 0;
+  rx_msg_next_frag = 0;
   if (radio_state_ == RadioState::LINKED && !raid_mode_) {
+#if CM_TDD_PREADV_MS > 0
+    enter_pre_advertising();  // offset D2's scan window past D1's scan -> mutual overlap
+#else
     enter_scanning();  // scheduled TDD disconnect: evidence window next
+#endif
   }
+}
+
+void BleApp::enter_pre_advertising() {
+  radio_state_ = RadioState::PRE_ADVERTISING;
+  state_started_ms_ = millis();
+  adv_last_rotate_ms_ = state_started_ms_;
+  need_pre_adv_start_ = true;
+  need_scan_start_ = false;
+  cdiag::bc(cdiag::B_ADV, 1, 0);
+  SerialLog.println("ble: -> PRE_ADV");
 }
 
 void BleApp::enter_scanning() {
   radio_state_ = RadioState::SCANNING;
   state_started_ms_ = millis();
   discovery_running_ = 0;
+  need_pre_adv_start_ = false;
+  need_scan_start_ = true;
+  scan_last_retry_ms_ = 0;
   cdiag::bc(cdiag::B_SCAN, 0, 0);
   SerialLog.println("ble: -> SCANNING");
 }
@@ -494,14 +527,21 @@ void BleApp::enter_scanning() {
 void BleApp::enter_advertising() {
   radio_state_ = RadioState::ADVERTISING;
   state_started_ms_ = millis();
+  adv_last_rotate_ms_ = state_started_ms_;
+  need_pre_adv_start_ = false;
   cdiag::bc(cdiag::B_ADV, 0, 0);
   SerialLog.println("ble: -> ADVERTISING");
 }
 
 void BleApp::inject_message(uint8_t type, const uint8_t* payload, uint16_t len) {
   cdiag::bc(cdiag::B_MSG, type, len);
+  cccd_ready_ = true;  // phone has finished GATT setup and is actively exchanging frames
   if (type == MSG_SESSION_STATE) {
     apply_session_message(payload, len);
+    return;
+  }
+  if (type == MSG_GPS_STATE) {
+    apply_phone_gps_message(payload, len);
     return;
   }
   if (type == MSG_INTERACTION_STATE) {
@@ -604,6 +644,25 @@ void BleApp::apply_session_message(const uint8_t* p, uint16_t len) {
   SerialLog.println(fresh_completion);
 }
 
+void BleApp::apply_phone_gps_message(const uint8_t* p, uint16_t len) {
+  // Layout: [ver=1][valid u8][demo u8][lat_e6 i32 LE][lon_e6 i32 LE][age_s u16 LE]
+  if (len < 13 || p[0] != 1) return;
+  phone_gps_.valid = p[1] != 0;
+  phone_gps_.demo = p[2] != 0;
+  memcpy(&phone_gps_.lat_e6, p + 3, 4);
+  memcpy(&phone_gps_.lon_e6, p + 7, 4);
+  phone_gps_.age_s = (uint16_t)p[11] | ((uint16_t)p[12] << 8);
+  phone_gps_.rx_at_ms = millis();
+  if (phone_gps_.valid) {
+    SerialLog.print("ble: phone_gps lat_e6=");
+    SerialLog.print(phone_gps_.lat_e6);
+    SerialLog.print(" lon_e6=");
+    SerialLog.print(phone_gps_.lon_e6);
+    SerialLog.print(" age_s=");
+    SerialLog.println(phone_gps_.age_s);
+  }
+}
+
 bool BleApp::send_message(uint8_t type, const uint8_t* payload, uint16_t len) {
   cdiag::bc(cdiag::B_SEND, type, len);
   if (!phone_connected_) return false;
@@ -633,7 +692,7 @@ bool BleApp::send_message(uint8_t type, const uint8_t* payload, uint16_t len) {
       SerialLog.println(ret, HEX);
       return false;
     }
-    delay(12);  // give the radio room between notifications
+    delay(18);  // give the radio room between notifications
   }
   return true;
 }
@@ -654,6 +713,7 @@ void BleApp::module_reinit() {
   raid_peer_tx_handle_ = 0;
   raid_outcome_pending_ = false;
   phone_connected_ = false;
+  cccd_ready_ = false;
   conn_handle_ = 0;
   radio_state_ = RadioState::SCANNING;
   state_started_ms_ = millis();
@@ -770,6 +830,9 @@ void BleApp::tick() {
     return;  // the raid owns the radio; the TDD scheduler is suspended
   }
   uint32_t now = millis();
+  if (phone_connected_) {
+    last_phone_connected_ms_ = now;
+  }
   if (peer_.device != 0) {
     peer_.fresh = (now - peer_.at_ms) <= CM_PEER_RECENT_MS;
   }
@@ -816,15 +879,48 @@ void BleApp::tick() {
       }
 #endif
       break;
+    case RadioState::PRE_ADVERTISING:
+      if (need_pre_adv_start_) {
+        need_pre_adv_start_ = false;
+        start_advertising(false);  // non-connectable: peer hears 0xC5 without phone hijacking before SCAN
+      }
+      if (discovery_mode_ && discovery_token_ != 0 &&
+          now - adv_last_rotate_ms_ >= (CM_TDD_PREADV_MS / 2)) {
+        adv_last_rotate_ms_ = now;
+        rotate_advertising_payload();
+      }
+      if (now - state_started_ms_ >= CM_TDD_PREADV_MS) {
+        tBleStatus r = aci_gap_set_non_discoverable();
+        if (r != BLE_STATUS_SUCCESS) {
+          SerialLog.print("ble: pre_adv non_disc fail 0x");
+          SerialLog.println(r, HEX);
+        }
+        enter_scanning();
+        restart_discovery();
+      }
+      break;
     case RadioState::SCANNING:
-      if (!discovery_running_ || now - state_started_ms_ >= CM_TDD_SCAN_MS) {
-        aci_gap_terminate_gap_procedure(GAP_GENERAL_DISCOVERY_PROC);
+      if (need_scan_start_ || (!discovery_running_ &&
+          now - state_started_ms_ < CM_TDD_SCAN_MS &&
+          now - scan_last_retry_ms_ >= 200)) {
+        restart_discovery();
+      }
+      if (now - state_started_ms_ >= CM_TDD_SCAN_MS) {
+        if (discovery_running_) {
+          aci_gap_terminate_gap_procedure(GAP_GENERAL_DISCOVERY_PROC);
+        }
         discovery_running_ = 0;
+        need_scan_start_ = false;
         enter_advertising();
         start_advertising();
       }
       break;
     case RadioState::ADVERTISING:
+      if (discovery_mode_ && discovery_token_ != 0 &&
+          now - adv_last_rotate_ms_ >= (CM_TDD_ADV_MS / 2)) {
+        adv_last_rotate_ms_ = now;
+        rotate_advertising_payload();
+      }
       if (now - state_started_ms_ >= CM_TDD_ADV_MS) {
         tBleStatus r = aci_gap_set_non_discoverable();
         if (r != BLE_STATUS_SUCCESS) {
@@ -854,28 +950,53 @@ static void feed_fragment(const uint8_t* frame, uint8_t frame_len) {
   // Zero-payload frames (HELLO) are exactly FRAME_HDR bytes — valid.
   if (frame_len < FRAME_HDR) return;
   if (frame[0] != FRAME_MAGIC || frame[1] != FRAME_PROTO_VER) return;
+  uint8_t msg_type = frame[2];
+  uint8_t msg_id = frame[3];
+  uint8_t frag_idx = frame[4];
+  uint8_t frag_count = frame[5];
   uint8_t chunk = frame[6];
+  if (frag_count == 0 || frag_count > 15 || frag_idx >= frag_count) return;
   if (frame_len < FRAME_HDR + chunk) return;
   uint8_t expect_crc = crc8_frame(frame, chunk);
   if (expect_crc != frame[7]) {
     SerialLog.println("ble: frag crc mismatch");
     rx_msg_frags_left = 0;
     rx_msg_len = 0;
+    rx_msg_next_frag = 0;
     return;
   }
-  if (frame[4] == 0) {  // first fragment resets the buffer
+  if (frag_idx == 0) {  // first fragment starts a fresh message
     rx_msg_len = 0;
-    rx_msg_frags_left = frame[5];
+    rx_msg_frags_left = frag_count;
+    rx_msg_id = msg_id;
+    rx_msg_type = msg_type;
+    rx_msg_next_frag = 0;
+  } else {
+    // Drop orphaned, duplicate, or out-of-order fragments instead of splicing
+    // them onto the previous message's leftover buffer bytes.
+    if (rx_msg_frags_left == 0 || msg_id != rx_msg_id ||
+        msg_type != rx_msg_type || frag_idx != rx_msg_next_frag) {
+      rx_msg_frags_left = 0;
+      rx_msg_len = 0;
+      rx_msg_next_frag = 0;
+      return;
+    }
   }
   if (rx_msg_len + chunk > sizeof(rx_msg_buf)) {
     rx_msg_frags_left = 0;
+    rx_msg_len = 0;
+    rx_msg_next_frag = 0;
     return;
   }
   memcpy(rx_msg_buf + rx_msg_len, frame + FRAME_HDR, chunk);
   rx_msg_len += chunk;
-  if (rx_msg_frags_left > 0) rx_msg_frags_left--;
+  rx_msg_next_frag++;
+  rx_msg_frags_left--;
   if (rx_msg_frags_left == 0) {
-    g_ble.inject_message(frame[2], rx_msg_buf, rx_msg_len);
+    uint16_t complete_len = rx_msg_len;
+    rx_msg_len = 0;
+    rx_msg_next_frag = 0;
+    g_ble.inject_message(msg_type, rx_msg_buf, complete_len);
   }
 }
 

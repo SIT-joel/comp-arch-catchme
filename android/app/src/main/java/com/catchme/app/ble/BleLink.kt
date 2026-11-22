@@ -134,6 +134,7 @@ class BleLink(private val context: Context) {
         scanCallback = newScanCallback()
         _state.value = State.Scanning
         scanStartedAt = System.currentTimeMillis()
+        Log.i(TAG, "beginScan wantedAlias=$wantedAlias")
         val balanced = android.bluetooth.le.ScanSettings.Builder()
             .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_BALANCED)
             .build()
@@ -350,6 +351,10 @@ class BleLink(private val context: Context) {
             if (System.currentTimeMillis() < reconnectPausedUntil) return@Runnable
             // A fresh app-level scan (user tap / supervisor) owns the link.
             if (_state.value is State.Scanning) return@Runnable
+            if (!ensureAdapter()) {
+                _state.value = State.Failed("Bluetooth unavailable or not enabled")
+                return@Runnable
+            }
             if (!reconnectControllerLevel()) _state.value = State.Idle
         }
         pendingReconnect = r
@@ -495,8 +500,9 @@ class BleLink(private val context: Context) {
         private const val TAG = "BleLink"
 
         /** Radio-silent period after a board-initiated disconnect: covers the
-         * board's 2 s evidence scan window (CM_TDD_SCAN_MS) plus margin; the
-         * reconnect then lands inside the 1.5 s advertising window. */
-        private const val RECONNECT_DELAY_MS = 2300L
+         * board's 2 s evidence scan window plus ~1.2 s of unobstructed peer
+         * advertising; the reconnect then lands inside the remaining 2.2 s
+         * advertising window. */
+        private const val RECONNECT_DELAY_MS = 3200L
     }
 }

@@ -33,16 +33,41 @@ def _pair_users(db: Session, user_id) -> tuple:
     return user_id, partner_id
 
 
+def expire_pending_if_stale(db: Session, quest_session: QuestSession | None, expiry_seconds: int = 300) -> bool:
+    """Cancel a pending invitation once its invitation window expires."""
+    if quest_session is None or quest_session.state != "pending":
+        return False
+    now = datetime.now(timezone.utc)
+    created = quest_session.created_at
+    if created is None:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if (now - created).total_seconds() > expiry_seconds:
+        quest_session.state = "cancelled"
+        quest_session.cancelled_at = now
+        db.commit()
+        return True
+    return False
+
+
 def _non_terminal_session(db: Session, user_a, user_b) -> QuestSession | None:
-    return (
+    expiry_seconds = get_settings().invitation_expiry_seconds
+    rows = (
         db.query(QuestSession)
         .join(SessionParticipant, SessionParticipant.session_id == QuestSession.id)
         .filter(
             SessionParticipant.user_id.in_((user_a, user_b)),
             QuestSession.state.in_(("pending", "active")),
         )
-        .first()
+        .order_by(QuestSession.created_at.desc())
+        .all()
     )
+    for row in rows:
+        if expire_pending_if_stale(db, row, expiry_seconds):
+            continue
+        return row
+    return None
 
 
 def serialize(db: Session, quest_session: QuestSession, for_user: uuid.UUID) -> SessionOut:
@@ -53,17 +78,7 @@ def serialize(db: Session, quest_session: QuestSession, for_user: uuid.UUID) -> 
         .all()
     )
     is_participant = any(row.SessionParticipant.user_id == for_user for row in participants)
-    now = datetime.now(timezone.utc)
-    expired = False
-    if quest_session.state == "pending":
-        created = quest_session.created_at
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        expired = (now - created).total_seconds() > 300  # invitation expires after 5 min
-        if expired and quest_session.state == "pending":
-            quest_session.state = "cancelled"
-            quest_session.cancelled_at = now
-            db.commit()
+    expire_pending_if_stale(db, quest_session, get_settings().invitation_expiry_seconds)
 
     geofence = None
     if quest_session.quest_id == "explore" and quest_session.geofence_lat is not None:

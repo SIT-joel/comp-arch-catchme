@@ -49,6 +49,16 @@
 #define MSG_QUIZ_STATE 23          // phone -> wearable: quiz progress [ver][active][idx][total]
 #define MSG_QUIZ_ANSWER 24         // wearable -> phone: A-D press [ver][idx][choice]
 #define MSG_PET_IDENTITY 25        // wearable -> phone: bonded cosmetic pet [ver][species][nameLen][nonce LE64][name<=8]
+#define MSG_GPS_STATE 26           // phone -> wearable: live phone GPS [ver][valid][demo][lat_e6 i32][lon_e6 i32][age_s u16]
+
+struct PhoneGpsMsg {
+  bool valid;
+  bool demo;
+  int32_t lat_e6;
+  int32_t lon_e6;
+  uint16_t age_s;
+  uint32_t rx_at_ms;
+};
 
 struct PeerObservation {
   uint8_t device;         // peer DEVICE_ID
@@ -102,6 +112,15 @@ class BleApp {
   void tick();  // call at least every ~10 ms
 
   bool phoneConnected() const { return phone_connected_; }
+  // True only after phone connects AND Android enables CCCD notifications (HELLO arrived or 1.2s fallback).
+  bool phoneReady() const {
+    return phone_connected_ && (cccd_ready_ || (millis() - connected_at_ms_ >= 1200UL));
+  }
+  // True when the phone link has been absent longer than a scheduled TDD cycle.
+  bool phoneLinkLost(uint32_t grace_ms = 12000UL) const {
+    return !phone_connected_ && last_phone_connected_ms_ != 0 &&
+           (millis() - last_phone_connected_ms_) >= grace_ms;
+  }
   uint32_t adverts_received() const { return adverts_rx_; }
 
   // Latest peer observation state (updated by scan events).
@@ -131,6 +150,7 @@ class BleApp {
 
   const SessionStateMsg& session() const { return session_; }
   const InteractionStateMsg& interaction() const { return interaction_; }
+  const PhoneGpsMsg& phone_gps() const { return phone_gps_; }
   const char* last_completion() const { return completion_; }
 
   // --- Nearby discovery (unpaired mode; never quest evidence) ---
@@ -164,6 +184,7 @@ class BleApp {
   // Sessions state is updated by SESSION_STATE messages from the phone.
   void apply_session_message(const uint8_t* payload, uint16_t len);
   void apply_interaction_message(const uint8_t* payload, uint16_t len);
+  void apply_phone_gps_message(const uint8_t* payload, uint16_t len);
 
   // Called from the HCI event callback (bridging C callback to instance).
   // bdaddr = the peer's address (LSB-first, as in the connection-complete
@@ -198,7 +219,7 @@ class BleApp {
   // Strict time-division radio scheduler (hardware-verified: this stack
   // rejects advertise+scan with 0x0C and scan-while-connected with 0x82,
   // so the radio alternates; the phone reconnects during ADVERTISING windows).
-  enum class RadioState : uint8_t { LINKED, SCANNING, ADVERTISING };
+  enum class RadioState : uint8_t { LINKED, PRE_ADVERTISING, SCANNING, ADVERTISING };
   // v2 raid: dedicated radio mode — the phone link drops, board 1 (central)
   // connects to board 2, both exchange game traffic via write-without-
   // response to each other's UART TX characteristic (gate-proven transport).
@@ -234,15 +255,23 @@ class BleApp {
   const char* gate_phase_name() const;
 #endif
 
-  void start_advertising();
+  void start_advertising(bool connectable = true);
   void rotate_advertising_payload();
   void restart_discovery();
+  void enter_pre_advertising();
   void enter_scanning();
   void enter_advertising();
 
   bool phone_connected_ = false;
+  bool cccd_ready_ = false;
+  uint32_t connected_at_ms_ = 0;
+  uint32_t last_phone_connected_ms_ = 0;
   volatile bool need_advertise_ = true;
+  bool need_pre_adv_start_ = false;
+  bool need_scan_start_ = false;
   uint32_t last_discovery_ms_ = 0;
+  uint32_t scan_last_retry_ms_ = 0;
+  uint32_t adv_last_rotate_ms_ = 0;
   uint16_t conn_handle_ = 0;
   RadioState radio_state_ = RadioState::ADVERTISING;
   // v2 raid state (runtime-gated; zero effect until raid_start()).
@@ -284,6 +313,7 @@ class BleApp {
 
   SessionStateMsg session_{};
   InteractionStateMsg interaction_{};
+  PhoneGpsMsg phone_gps_{};
   char completion_[24] = {0};
 
   // Discovery state. discovery_synced_ shows the

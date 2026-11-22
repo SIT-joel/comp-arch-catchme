@@ -11,7 +11,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.ByteBuffer
@@ -61,6 +64,7 @@ class AppModel(private val context: Context, baseUrl: String) {
         val gpsFix: GpsFixView? = null,
         val activeSession: SessionView? = null,
         val quiz: QuizView? = null,  // v2 quiz: active 'Know Your Partner' state
+        val proximityAlert: String? = null,  // non-null when out of BT range during an active quest
         // --- achievements (15 Nov): the catalog + this user's unlocks ---
         val achievements: List<AccView> = emptyList(),
         val newAchievement: String? = null,  // latest unlock name (banner)
@@ -75,6 +79,7 @@ class AppModel(private val context: Context, baseUrl: String) {
         val progressMs: Long,
         val targetMs: Long?,
         val needsMyAccept: Boolean,
+        val interactionSummary: String? = null,
     )
 
     /** One achievement row for the achievements card (unlocked=false rows
@@ -87,6 +92,16 @@ class AppModel(private val context: Context, baseUrl: String) {
         val unlockedAt: String?,
     )
 
+    data class QuizQuestionResult(
+        val index: Int,
+        val text: String,
+        val options: List<String>,
+        val answered: Boolean,
+        val choice: Int?,
+        val rightIndex: Int?,
+        val isCorrect: Boolean?,
+    )
+
     /** v2 quiz: the phone renders the question; the wearable is the A-D pad. */
     data class QuizView(
         val active: Boolean,
@@ -96,9 +111,12 @@ class AppModel(private val context: Context, baseUrl: String) {
         val options: List<String>,
         val myAnswered: Int,
         val myTotal: Int,
+        val myCorrect: Int,
         val partnerAnswered: Int,
         val partnerTotal: Int,
+        val partnerCorrect: Int,
         val completed: Boolean,
+        val results: List<QuizQuestionResult> = emptyList(),
         val lastError: String? = null,
     )
 
@@ -142,11 +160,14 @@ class AppModel(private val context: Context, baseUrl: String) {
                     .putString("device", device?.optString("id"))
                     .putInt("alias", device?.optInt("firmware_alias") ?: 0)
                     .apply()
-                _ui.value = _ui.value.copy(
-                    signedIn = true, username = username,
-                    userId = me.getJSONObject("user").optString("id"),
-                    deviceId = device?.let { UUID.fromString(it.optString("id")) },
-                    deviceAlias = device?.optInt("firmware_alias"))
+                _ui.update {
+                    it.copy(
+                        signedIn = true, username = username,
+                        userId = me.getJSONObject("user").optString("id"),
+                        deviceId = device?.let { d -> UUID.fromString(d.optString("id")) },
+                        deviceAlias = device?.optInt("firmware_alias"),
+                    )
+                }
                 refreshDeviceState()
                 startDiscoveryLoop()
                 refreshDiscoveryState()
@@ -192,18 +213,23 @@ class AppModel(private val context: Context, baseUrl: String) {
             android.util.Log.i("AppModel", "session restored (token validated)")
             runCatching {
                 val device = me.optJSONObject("device")
-                _ui.value = _ui.value.copy(
-                    signedIn = true,
-                    username = prefs.getString("username", null),
-                    userId = me.getJSONObject("user").optString("id"),
-                    deviceId = device?.let { UUID.fromString(it.optString("id")) },
-                    deviceAlias = device?.optInt("firmware_alias"))
+                _ui.update {
+                    it.copy(
+                        signedIn = true,
+                        username = prefs.getString("username", null),
+                        userId = me.getJSONObject("user").optString("id"),
+                        deviceId = device?.let { d -> UUID.fromString(d.optString("id")) },
+                        deviceAlias = device?.optInt("firmware_alias"),
+                    )
+                }
                 refreshDeviceState()
                 startDiscoveryLoop()
                 refreshDiscoveryState()
                 refreshPetAndAchievements()
                 startGps()
                 onRestored()
+            }.onFailure {
+                android.util.Log.w("AppModel", "restore post-me setup failed: ${it.message}", it)
             }
         }
     }
@@ -217,9 +243,12 @@ class AppModel(private val context: Context, baseUrl: String) {
                 val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
                 prefs.edit().putString("device", device.getString("id"))
                     .putInt("alias", device.getInt("firmware_alias")).apply()
-                _ui.value = _ui.value.copy(
-                    deviceId = UUID.fromString(device.getString("id")),
-                    deviceAlias = device.getInt("firmware_alias"))
+                _ui.update {
+                    it.copy(
+                        deviceId = UUID.fromString(device.getString("id")),
+                        deviceAlias = device.getInt("firmware_alias"),
+                    )
+                }
                 onResult(true, null)
             } catch (e: Exception) {
                 onResult(false, e.message)
@@ -243,6 +272,27 @@ class AppModel(private val context: Context, baseUrl: String) {
             scope.launch { uploaderLoop() }
             scope.launch { stateLoop() }
             scope.launch { linkSupervisor(alias) }
+            scope.launch { syncOnBleConnectLoop() }
+        }
+    }
+
+    /** Push session/quiz/time/pet state immediately after BLE connects so the
+     *  short TDD LINKED window does not wait up to 3 s for stateLoop. */
+    private suspend fun syncOnBleConnectLoop() {
+        var wasConnected = false
+        ble.state.collect { state ->
+            val nowConnected = state is BleLink.State.Connected
+            if (nowConnected && !wasConnected) {
+                bleDisconnectedAtMs = 0L
+                lastIdleInteractionSentOnConn = false
+                lastTimeAnchorSentAtMs = 0L
+                updateProximityAlert()
+                refreshDeviceStateSync()
+            } else if (!nowConnected && wasConnected) {
+                bleDisconnectedAtMs = System.currentTimeMillis()
+                updateProximityAlert()
+            }
+            wasConnected = nowConnected
         }
     }
 
@@ -278,7 +328,7 @@ class AppModel(private val context: Context, baseUrl: String) {
             // next link (4-byte message, negligible cost per window).
             if (state !is BleLink.State.Connected && boardAckedMode != -1) {
                 boardAckedMode = -1
-                _ui.value = _ui.value.copy(boardModeAcked = false)
+                _ui.update { it.copy(boardModeAcked = false) }
             }
         }
     }
@@ -329,7 +379,8 @@ class AppModel(private val context: Context, baseUrl: String) {
                     )
                 )
             }
-            _ui.value = _ui.value.copy(pendingUploads = db.dao().pendingCount())
+            val count = db.dao().pendingCount()
+            _ui.update { it.copy(pendingUploads = count) }
         }
     }
 
@@ -356,7 +407,7 @@ class AppModel(private val context: Context, baseUrl: String) {
                 // [ver][mode] — the wearable confirmed its applied mode.
                 if (msg.payload.size >= 2 && msg.payload[0].toInt() == 1) {
                     boardAckedMode = msg.payload[1].toInt()
-                    _ui.value = _ui.value.copy(boardModeAcked = boardAckedMode == desiredBoardMode())
+                    _ui.update { it.copy(boardModeAcked = boardAckedMode == desiredBoardMode()) }
                 }
             }
         }
@@ -377,6 +428,17 @@ class AppModel(private val context: Context, baseUrl: String) {
             val (seq, rec) = RecordCodec.decode(
                 payload, bootId ?: "unknown", state.sessionId != null, state.sessionId,
                 timeSynced, anchorEpoch, 500)
+            // Track fresh direct partner wearable BLE observations for live proximity alerts.
+            val peerJson = rec.optJSONObject("peer")
+            val expectedPartnerAlias = state.deviceAlias?.let { if (it == 1) 2 else 1 } ?: 0
+            if (peerJson?.optBoolean("observed") == true &&
+                (expectedPartnerAlias == 0 || peerJson.optInt("_alias", 0) == expectedPartnerAlias)
+            ) {
+                val obsAgeMs = peerJson.optLong("observation_age_ms", 0L).coerceAtLeast(0L)
+                val obsAt = System.currentTimeMillis() - obsAgeMs
+                if (obsAt > lastPeerBleSeenMs) lastPeerBleSeenMs = obsAt
+                updateProximityAlert()
+            }
             // v2: the phone's real GPS fix is the product's only location
             // source; stamp it with its true age (never clamped).
             stampPhoneGps(rec, System.currentTimeMillis())
@@ -388,24 +450,41 @@ class AppModel(private val context: Context, baseUrl: String) {
                 payload = resolveAliases(rec).toString(),
                 capturedAtMs = System.currentTimeMillis())
             db.dao().insert(row)
-            _ui.value = _ui.value.copy(pendingUploads = db.dao().pendingCount())
+            val count = db.dao().pendingCount()
+            _ui.update { it.copy(pendingUploads = count) }
         }.onFailure { android.util.Log.w("AppModel", "enqueue failed (${payload.size}B): ${it.message}") }
     }
 
+    @Volatile private var peerHbBootEpoch = 1
+    @Volatile private var lastPeerHbCounter = -1
+
     /** Firmware aliases -> server UUIDs/tokens using known device state.
-     * When the peer device cannot be resolved (unpaired discovery neighbor),
-     * the peer fields are STRIPPED: the server contract requires
-     * peer.observed=true to carry a device_id, and an unresolved neighbor
-     * has no quest meaning anyway (evidence binds to the session token). */
+     * Verifies both expected partner alias AND advertised 16-bit session token
+     * hash (fnv16) before stamping session_token, and tracks partner wearable
+     * reboots so reset heartbeat counters do not stall server scoring. */
     private fun resolveAliases(rec: JSONObject): JSONObject {
         val peer = rec.optJSONObject("peer") ?: return rec
+        val observedAlias = peer.optInt("_alias", 0)
+        val observedTokenHash = peer.optInt("_token_hash", 0)
+        peer.remove("_alias")
+        peer.remove("_token_hash")
         if (!peer.optBoolean("observed")) return rec
         val partner = _ui.value.partnerDeviceId
         val token = _ui.value.sessionToken
-        if (partner != null && token != null) {
+        val expectedAlias = _ui.value.deviceAlias?.let { if (it == 1) 2 else 1 } ?: 0
+        val expectedTokenHash = if (token != null) fnv16(tokenBytes(token)) else 0
+        if (partner != null && token != null &&
+            observedAlias == expectedAlias &&
+            observedTokenHash != 0 && observedTokenHash == expectedTokenHash
+        ) {
+            val hbSeq = peer.optInt("heartbeat_sequence", -1)
+            if (hbSeq >= 0 && lastPeerHbCounter > 0 && hbSeq < lastPeerHbCounter) {
+                peerHbBootEpoch++
+            }
+            if (hbSeq >= 0) lastPeerHbCounter = hbSeq
             peer.put("device_id", partner.toString())
             peer.put("session_token", token)
-            peer.put("boot_id", "d${_ui.value.deviceAlias?.let { if (it == 1) 2 else 1 } ?: 0}")
+            peer.put("boot_id", "d${expectedAlias}-e${peerHbBootEpoch}")
         } else {
             peer.put("observed", false)
             peer.remove("device_id")
@@ -460,8 +539,10 @@ class AppModel(private val context: Context, baseUrl: String) {
                     sendAck(ackSeqs)
                 }
                 validationFailures = 0
-                _ui.value = _ui.value.copy(
-                    pendingUploads = db.dao().pendingCount(), lastUploadOk = true, lastTick = System.currentTimeMillis())
+                val pending = db.dao().pendingCount()
+                _ui.update {
+                    it.copy(pendingUploads = pending, lastUploadOk = true, lastTick = System.currentTimeMillis())
+                }
             } catch (e: Api.ApiError) {
                 // 422 = the server permanently rejected this batch's content
                 // (e.g. records from an intermediate firmware build with an
@@ -476,9 +557,9 @@ class AppModel(private val context: Context, baseUrl: String) {
                         validationFailures = 0
                     }
                 }
-                _ui.value = _ui.value.copy(lastUploadOk = false)
+                _ui.update { it.copy(lastUploadOk = false) }
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(lastUploadOk = false)
+                _ui.update { it.copy(lastUploadOk = false) }
             }
         }
     }
@@ -499,71 +580,83 @@ class AppModel(private val context: Context, baseUrl: String) {
     /** Periodically: device state -> SESSION_STATE + TIME_ANCHOR to wearable. */
     private suspend fun stateLoop() {
         while (true) {
-            delay(3000)
-            val state = _ui.value
-            val device = state.deviceId ?: continue
-            runCatching {
-                val ds = api.deviceState(device)
-                val session = ds.optJSONObject("session")
-                val active = session != null && session.getString("state") == "active"
-                val token = if (active) session?.optString("token") else null
-                // partner_alias present => partnered: keep the discovery
-                // mode current even while the app is backgrounded (pairing
-                // must stop general discovery on the next phone link).
-                if (!ds.isNull("partner_alias")) {
-                    if (!_ui.value.partnered) {
-                        _ui.value = _ui.value.copy(partnered = true)
-                    }
-                } else if (_ui.value.partnered) {
-                    _ui.value = _ui.value.copy(partnered = false)
-                }
-                // The partner's device UUID resolves peer observations in
-                // relayed telemetry (server contract: peer.device_id).
-                val partnerDevice = if (ds.isNull("partner_device_id")) null
-                    else UUID.fromString(ds.getString("partner_device_id"))
-                _ui.value = _ui.value.copy(partnerDeviceId = partnerDevice)
-                _ui.value = _ui.value.copy(
-                    sessionToken = token,
-                    sessionId = session?.let { UUID.fromString(it.getString("session_id")) },
-                    activeSession = parseSessionView(session),
-                )
-                if (ble.state.value is BleLink.State.Connected) {
-                    // v2 XP visibility: the pet mirror (level/XP) must refresh
-                    // after quest awards, not only at sign-in — otherwise the
-                    // pet card and the wearable's level stay stale until the
-                    // app restarts. Throttled to one fetch per 10 s.
-                    val nowMs = System.currentTimeMillis()
-                    if (nowMs - lastPetRefreshMs >= 10_000) {
-                        lastPetRefreshMs = nowMs
-                        refreshPetAndAchievements()
-                    }
-                    sendSessionState(ds)
-                    sendInteractionState(ds)
-                    sendTimeAnchor()
-                    sendPartnerInfo(ds)
-                    sendPetState()
-                    // Ask for STATUS (boot id) until the board answers; records
-                    // are otherwise queued with boot_id "unknown", which breaks
-                    // per-boot identity once the board reboots.
-                    if (bootIdCache == null) {
-                        ble.send(Frame.MSG_HELLO, ByteArray(0))
-                    }
-                    // Keep the wearable's discovery mode in sync (no-op once
-                    // acked; resends after reconnects until confirmed).
-                    relayModeToBoard(force = false)
-                    // v2 quiz: while a quiz session is active, fetch the
-                    // per-answerer state and relay the CURRENT question to
-                    // the wearable (the question renders here; the wearable
-                    // is the A-D pad).
-                    if (session?.optString("quest_id") == "quiz") {
-                        refreshQuiz(session.getString("session_id"))
-                    } else if (_ui.value.quiz?.active == true) {
-                        _ui.value = _ui.value.copy(quiz = null)
-                    }
-                }
-            }.onFailure {
-                android.util.Log.w("AppModel", "stateLoop failed: ${it.message}")
+            delay(if (_ui.value.activeSession != null) 2000 else 3000)
+            refreshDeviceStateSync()
+            updateProximityAlert()
+        }
+    }
+
+    private val relayMutex = Mutex()
+    @Volatile private var lastTimeAnchorFetchMs = 0L
+    @Volatile private var lastTimeAnchorSentAtMs = 0L
+    @Volatile private var lastIdleInteractionSentOnConn = false
+    @Volatile private var lastRelayConnSessionId = 0L
+    @Volatile private var lastPeerBleSeenMs = 0L
+    @Volatile private var bleDisconnectedAtMs = 0L
+    @Volatile private var activeQuestIdTracked: UUID? = null
+    @Volatile private var activeQuestStartedAtMs = 0L
+    @Volatile private var lastQuizSessionId: UUID? = null
+
+    private fun updateProximityAlert() {
+        val active = _ui.value.activeSession
+        val now = System.currentTimeMillis()
+        if (active == null || active.state != "active") {
+            if (active == null) {
+                activeQuestIdTracked = null
+                activeQuestStartedAtMs = 0L
             }
+            if (_ui.value.proximityAlert != null) {
+                _ui.update { it.copy(proximityAlert = null) }
+            }
+            return
+        }
+        if (activeQuestIdTracked != active.sessionId || activeQuestStartedAtMs == 0L) {
+            activeQuestIdTracked = active.sessionId
+            activeQuestStartedAtMs = now
+            lastPeerHbCounter = -1
+            if (ble.state.value !is BleLink.State.Connected && bleDisconnectedAtMs == 0L) {
+                bleDisconnectedAtMs = now
+            }
+        }
+        val linkAlert = ble.state.value !is BleLink.State.Connected &&
+            bleDisconnectedAtMs != 0L && (now - bleDisconnectedAtMs) >= 12_000L
+        val peerMissing = (now - activeQuestStartedAtMs) >= 14_000L &&
+            (lastPeerBleSeenMs == 0L || (now - lastPeerBleSeenMs) >= 14_000L)
+        val timerActive = active.questId == "explore" ||
+            (active.questId == "together" && active.interactionSummary?.startsWith("Codes confirmed") == true)
+        val alert: String? = when {
+            linkAlert -> "Out of Bluetooth range of your TinyScreen+ — move closer to your wearable."
+            peerMissing -> if (timerActive) {
+                "Out of Bluetooth proximity range of partner's TinyScreen+ — quest timer paused."
+            } else {
+                "Out of Bluetooth proximity range of partner's TinyScreen+ — move closer."
+            }
+            else -> null
+        }
+        if (_ui.value.proximityAlert != alert) {
+            _ui.update { it.copy(proximityAlert = alert) }
+        }
+    }
+
+    private suspend fun relayDeviceStateToWearable(ds: JSONObject) {
+        if (ble.state.value !is BleLink.State.Connected) return
+        relayMutex.withLock {
+            if (ble.state.value !is BleLink.State.Connected) return
+            val nowMs = System.currentTimeMillis()
+            if (nowMs - lastPetRefreshMs >= 10_000) {
+                lastPetRefreshMs = nowMs
+                refreshPetAndAchievements()
+            }
+            sendSessionState(ds)
+            sendPhoneGpsState(ds)
+            sendInteractionState(ds)
+            sendTimeAnchor()
+            sendPartnerInfo(ds)
+            sendPetState()
+            if (bootIdCache == null) {
+                ble.send(Frame.MSG_HELLO, ByteArray(0))
+            }
+            relayModeToBoard(force = false)
         }
     }
 
@@ -601,6 +694,34 @@ class AppModel(private val context: Context, baseUrl: String) {
         ble.send(Frame.MSG_SESSION_STATE, out)
     }
 
+    @Volatile private var lastGpsRelayMs = 0L
+
+    /** Relay latest real phone GPS coordinates + true age over Bluetooth BLE to TinyScreen+. */
+    private fun sendPhoneGpsState(ds: JSONObject) {
+        val session = ds.optJSONObject("session")
+        val questId = session?.optString("quest_id") ?: ""
+        val state = session?.optString("state") ?: ""
+        val inExplore = questId == "explore" && (state == "active" || state == "pending")
+        val now = System.currentTimeMillis()
+        if (!inExplore && now - lastGpsRelayMs < 6_000L) return
+        val fix = _ui.value.gpsFix
+        val out = ByteArray(13)
+        out[0] = 1
+        out[1] = if (fix != null) 1 else 0
+        out[2] = if (session?.optBoolean("demo") == true) 1 else 0
+        if (fix != null) {
+            val ageSec = ((now - fix.fixTimeMs).coerceAtLeast(0L) / 1000L)
+                .coerceAtMost(65535L).toInt()
+            val buf = ByteBuffer.wrap(out, 3, 10).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt((fix.latitude * 1_000_000.0).toInt())
+            buf.putInt((fix.longitude * 1_000_000.0).toInt())
+            buf.putShort(ageSec.toShort())
+        }
+        if (ble.send(Frame.MSG_GPS_STATE, out)) {
+            lastGpsRelayMs = now
+        }
+    }
+
     /** Relay only this account's code plus non-secret phase metadata. */
     private fun sendInteractionState(ds: JSONObject) {
         val session = ds.optJSONObject("session")
@@ -611,9 +732,14 @@ class AppModel(private val context: Context, baseUrl: String) {
         val out = ByteArray(58)
         out[0] = 1
         if ((!isFinished && (session == null || session.optString("state") != "active")) || interaction == null) {
-            ble.send(Frame.MSG_INTERACTION_STATE, out)
+            if (!lastIdleInteractionSentOnConn) {
+                if (ble.send(Frame.MSG_INTERACTION_STATE, out)) {
+                    lastIdleInteractionSentOnConn = true
+                }
+            }
             return
         }
+        lastIdleInteractionSentOnConn = false
         val keepSummary = !isFinished || interaction.optString("quest_id") == "heart_challenge"
         out[1] = if (keepSummary) when (interaction.optString("phase")) {
             "start_pin" -> 1; "timing" -> 2; "end_pin" -> 3
@@ -672,7 +798,8 @@ class AppModel(private val context: Context, baseUrl: String) {
         val commandId = UUID.nameUUIDFromBytes(
             "${sessionId}:${_ui.value.deviceAlias ?: 0}:$nonce".toByteArray(Charsets.US_ASCII))
         scope.launch {
-            val ok = runCatching {
+            var ackCode = 0
+            runCatching {
                 when (kind) {
                     1 -> if (stage.isNotEmpty() && valueLen == 4) api.submitInteractionPin(
                         sessionId, stage, value, codeVersion, commandId)
@@ -682,11 +809,18 @@ class AppModel(private val context: Context, baseUrl: String) {
                     // v2: heart-quest kinds (3 truth / 4 dare / 5 skip) are gone.
                     else -> error("unknown interaction command")
                 }
-            }.isSuccess
+            }.onSuccess {
+                ackCode = 1
+                refreshDeviceStateSync()
+            }.onFailure { err ->
+                val isClientReject = err is Api.ApiError && err.status in 400..499
+                ackCode = if (isClientReject) 0 else 2  // 2 = transient network error -> board auto-retries
+                android.util.Log.w("AppModel", "interaction cmd kind=$kind failed ack=$ackCode: ${err.message}")
+            }
             val ack = ByteArray(10)
             ack[0] = 1
             ByteBuffer.wrap(ack, 1, 8).order(ByteOrder.LITTLE_ENDIAN).putLong(nonce)
-            ack[9] = if (ok) 1 else 0
+            ack[9] = ackCode.toByte()
             ble.send(Frame.MSG_INTERACTION_ACK, ack)
         }
     }
@@ -720,14 +854,23 @@ class AppModel(private val context: Context, baseUrl: String) {
     }
 
     private fun sendTimeAnchor() {
-        runCatching {
-            val t = api.serverTimeMs()
-            anchorEpoch = t / 1000
-            timeSynced = true
+        val now = System.currentTimeMillis()
+        if (!timeSynced || now - lastTimeAnchorFetchMs >= 30_000L) {
+            runCatching {
+                val t = api.serverTimeMs()
+                anchorEpoch = t / 1000
+                lastTimeAnchorFetchMs = now
+                timeSynced = true
+            }
+        }
+        if (timeSynced && now - lastTimeAnchorSentAtMs >= 15_000L) {
+            val epochNow = anchorEpoch + ((now - lastTimeAnchorFetchMs) / 1000L).coerceAtLeast(0L)
             val payload = ByteArray(6)
-            putU32(payload, 0, anchorEpoch)
+            putU32(payload, 0, epochNow)
             putU16(payload, 4, 500)
-            ble.send(Frame.MSG_TIME_ANCHOR, payload)
+            if (ble.send(Frame.MSG_TIME_ANCHOR, payload)) {
+                lastTimeAnchorSentAtMs = now
+            }
         }
     }
 
@@ -748,42 +891,146 @@ class AppModel(private val context: Context, baseUrl: String) {
 
     private fun parseSessionView(session: JSONObject?): SessionView? {
         if (session == null) return null
-        val id = runCatching { UUID.fromString(session.getString("session_id")) }.getOrNull()
+        val idStr = session.optString("session_id").takeIf { it.isNotBlank() }
+            ?: session.optString("id").takeIf { it.isNotBlank() }
             ?: return null
+        val id = runCatching { UUID.fromString(idStr) }.getOrNull() ?: return null
+        val questId = session.optString("quest_id", "")
+        val state = session.optString("state", "")
+        var needsAccept = session.optBoolean("needs_my_accept", false)
+        if (!session.has("needs_my_accept") && state == "pending") {
+            val myId = _ui.value.userId
+            val parts = session.optJSONArray("participants")
+            if (myId != null && parts != null) {
+                for (i in 0 until parts.length()) {
+                    val p = parts.optJSONObject(i) ?: continue
+                    if (p.optString("user_id") == myId) {
+                        needsAccept = !p.optBoolean("accepted", false)
+                    }
+                }
+            }
+        }
+        val interaction = session.optJSONObject("interaction")
+        val summary = if (questId == "together" && state == "active" && interaction != null) {
+            val phase = interaction.optString("phase", "")
+            val ownCode = interaction.optString("own_code", "")
+            when (phase) {
+                "start_pin", "end_pin" -> {
+                    val myDone = interaction.optBoolean("partner_code_confirmed_by_me", false)
+                    val partnerDone = interaction.optBoolean("own_code_confirmed_by_partner", false)
+                    val stageLabel = if (phase == "start_pin") "Start PIN" else "End PIN"
+                    "$stageLabel · Your PIN: ${ownCode.ifBlank { "----" }} · " +
+                        "You ${if (myDone) "✓" else "waiting"} / Partner ${if (partnerDone) "✓" else "waiting"}"
+                }
+                "timing" -> "Codes confirmed — stay within Bluetooth range of partner's TinyScreen+"
+                else -> null
+            }
+        } else null
         return SessionView(
             sessionId = id,
-            questId = session.optString("quest_id", ""),
-            state = session.optString("state", ""),
+            questId = questId,
+            state = state,
             demo = session.optBoolean("demo", false),
             progressMs = session.optLong("progress_ms", 0L),
             targetMs = if (session.isNull("target_ms")) null else session.optLong("target_ms", 0L),
-            needsMyAccept = session.optBoolean("needs_my_accept", false),
+            needsMyAccept = needsAccept,
+            interactionSummary = summary,
         )
     }
 
-    private fun refreshDeviceState() {
-        scope.launch {
-            runCatching {
-                val ds = _ui.value.deviceId?.let { api.deviceState(it) } ?: return@launch
-                val session = ds.optJSONObject("session")
-                val active = session != null && session.optString("state") == "active"
-                _ui.value = _ui.value.copy(
-                    sessionToken = if (active) session?.optString("token") else null,
-                    sessionId = session?.let { UUID.fromString(it.getString("session_id")) },
+    private suspend fun refreshDeviceStateSync() {
+        runCatching {
+            val devId = _ui.value.deviceId
+            if (devId == null) {
+                val arr = api.listSessions().optJSONArray("sessions")
+                var found: JSONObject? = null
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        val s = arr.optJSONObject(i) ?: continue
+                        val st = s.optString("state")
+                        if (st == "pending" || st == "active") {
+                            found = s
+                            break
+                        }
+                    }
+                }
+                val active = found != null && found.optString("state") == "active"
+                val sid = found?.let { runCatching { UUID.fromString(it.getString("id")) }.getOrNull() }
+                _ui.update {
+                    it.copy(
+                        sessionToken = if (active) found?.optString("token")?.takeIf { t -> t.isNotBlank() } else null,
+                        sessionId = sid,
+                        activeSession = parseSessionView(found),
+                    )
+                }
+                if (active && found?.optString("quest_id") == "quiz" && sid != null) {
+                    lastQuizSessionId = sid
+                    refreshQuizSync(sid.toString())
+                } else {
+                    val prevQuizSid = lastQuizSessionId
+                    if (_ui.value.quiz != null && _ui.value.quiz?.completed != true && prevQuizSid != null) {
+                        refreshQuizSync(prevQuizSid.toString())
+                    }
+                    if (found != null && found.optString("quest_id") != "quiz") {
+                        lastQuizSessionId = null
+                        _ui.update { it.copy(quiz = null) }
+                    }
+                }
+                return@runCatching
+            }
+            val ds = api.deviceState(devId)
+            val session = ds.optJSONObject("session")
+            val active = session != null && session.optString("state") == "active"
+            val token = if (active) session?.optString("token")?.takeIf { it.isNotBlank() } else null
+            val isPartnered = !ds.isNull("partner_alias")
+            val partnerDevice = if (ds.isNull("partner_device_id")) null
+                else UUID.fromString(ds.getString("partner_device_id"))
+            val sidStr = session?.optString("session_id")
+            val sidUuid = sidStr?.let { s -> runCatching { UUID.fromString(s) }.getOrNull() }
+            _ui.update {
+                it.copy(
+                    partnered = isPartnered,
+                    partnerDeviceId = partnerDevice,
+                    sessionToken = token,
+                    sessionId = sidUuid,
                     activeSession = parseSessionView(session),
                 )
             }
+            if (active && session?.optString("quest_id") == "quiz" && sidStr != null) {
+                if (sidUuid != null) lastQuizSessionId = sidUuid
+                refreshQuizSync(sidStr)
+            } else {
+                val prevQuizSid = lastQuizSessionId
+                if (_ui.value.quiz != null && _ui.value.quiz?.completed != true && prevQuizSid != null) {
+                    refreshQuizSync(prevQuizSid.toString())
+                    refreshPetAndAchievements()
+                }
+                if (session != null && session.optString("quest_id") != "quiz") {
+                    lastQuizSessionId = null
+                    _ui.update { it.copy(quiz = null) }
+                }
+            }
+            relayDeviceStateToWearable(ds)
+        }.onFailure {
+            android.util.Log.w("AppModel", "refreshDeviceState failed: ${it.message}")
         }
+    }
+
+    fun refreshDeviceState() {
+        scope.launch { refreshDeviceStateSync() }
     }
 
     fun questAction(questId: String, demo: Boolean, landmarkId: String? = null, onResult: (Boolean, String?) -> Unit) {
         scope.launch {
             try {
+                lastQuizSessionId = null
+                _ui.update { it.copy(quiz = null, proximityAlert = null) }
                 api.createSession(questId, demo, landmarkId)
-                refreshDeviceState()
+                refreshDeviceStateSync()
                 onResult(true, null)
             } catch (e: Exception) {
-                onResult(false, e.message)
+                refreshDeviceStateSync()
+                onResult(false, e.message ?: "Failed to start $questId")
             }
         }
     }
@@ -795,10 +1042,11 @@ class AppModel(private val context: Context, baseUrl: String) {
         scope.launch {
             try {
                 api.acceptSession(id)
-                refreshDeviceState()
+                refreshDeviceStateSync()
                 onResult(true, null)
             } catch (e: Exception) {
-                onResult(false, e.message)
+                refreshDeviceStateSync()
+                onResult(false, e.message ?: "Failed to accept quest")
             }
         }
     }
@@ -807,10 +1055,13 @@ class AppModel(private val context: Context, baseUrl: String) {
         scope.launch {
             try {
                 api.cancelSession(id)
-                refreshDeviceState()
+                lastQuizSessionId = null
+                _ui.update { it.copy(quiz = null, proximityAlert = null) }
+                refreshDeviceStateSync()
                 onResult(true, null)
             } catch (e: Exception) {
-                onResult(false, e.message)
+                refreshDeviceStateSync()
+                onResult(false, e.message ?: "Failed to cancel quest")
             }
         }
     }
@@ -821,7 +1072,8 @@ class AppModel(private val context: Context, baseUrl: String) {
     fun refreshPetAndAchievements() {
         scope.launch {
             try {
-                _ui.value = _ui.value.copy(pet = api.pet())
+                val p = api.pet()
+                _ui.update { it.copy(pet = p) }
             } catch (e: Exception) {
                 android.util.Log.w("AppModel", "pet fetch failed: ${e.message}")
             }
@@ -851,16 +1103,16 @@ class AppModel(private val context: Context, baseUrl: String) {
                         unlockedAt = item.optString("unlocked_at").takeIf { it != "null" },
                     )
                 }
-                val prevUnlocked = _ui.value.achievements
-                    .filter { it.unlocked }.map { it.id }.toSet()
-                _ui.value = _ui.value.copy(achievements = opts)
                 val newest = opts.filter { it.unlocked }
                     .maxByOrNull { it.unlockedAt ?: "" }
-                if (newest != null && newest.id !in prevUnlocked) {
-                    _ui.value = _ui.value.copy(
-                        newAchievement = newest.name,
-                        newAchievementAt = System.currentTimeMillis(),
-                    )
+                val now = System.currentTimeMillis()
+                _ui.update { cur ->
+                    val prevUnlocked = cur.achievements.filter { it.unlocked }.map { it.id }.toSet()
+                    if (newest != null && newest.id !in prevUnlocked) {
+                        cur.copy(achievements = opts, newAchievement = newest.name, newAchievementAt = now)
+                    } else {
+                        cur.copy(achievements = opts)
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.w("AppModel", "achievements fetch failed: ${e.message}")
@@ -887,11 +1139,11 @@ class AppModel(private val context: Context, baseUrl: String) {
             lm.removeUpdates(listener)
             runCatching {
                 lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER,
-                    2000L, 1f, listener, android.os.Looper.getMainLooper())
+                    2000L, 0f, listener, android.os.Looper.getMainLooper())
             }
             runCatching {
                 lm.requestLocationUpdates(android.location.LocationManager.NETWORK_PROVIDER,
-                    5000L, 5f, listener, android.os.Looper.getMainLooper())
+                    3000L, 0f, listener, android.os.Looper.getMainLooper())
             }
             android.util.Log.i("AppModel", "GPS listeners re-registered (keep-alive)")
         } catch (e: SecurityException) {
@@ -906,14 +1158,13 @@ class AppModel(private val context: Context, baseUrl: String) {
             ?: return
         val listener = android.location.LocationListener { location ->
             android.util.Log.i("AppModel", "GPS fix: ${location.latitude},${location.longitude} acc=${location.accuracy}")
-            _ui.value = _ui.value.copy(
-                gpsFix = GpsFixView(
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    fixTimeMs = location.time,
-                    accuracyM = location.accuracy,
-                ),
+            val fix = GpsFixView(
+                latitude = location.latitude,
+                longitude = location.longitude,
+                fixTimeMs = location.time,
+                accuracyM = location.accuracy,
             )
+            _ui.update { it.copy(gpsFix = fix) }
         }
         try {
             // GPS is the real fix source; network provider is a fallback.
@@ -923,15 +1174,17 @@ class AppModel(private val context: Context, baseUrl: String) {
             // has no Looper (verified: both registrations failed silently).
             runCatching {
                 lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER,
-                    2000L, 1f, listener, android.os.Looper.getMainLooper())
+                    2000L, 0f, listener, android.os.Looper.getMainLooper())
             }.onFailure { android.util.Log.w("AppModel", "GPS_PROVIDER failed: ${it.message}") }
             runCatching {
                 lm.requestLocationUpdates(android.location.LocationManager.NETWORK_PROVIDER,
-                    5000L, 5f, listener, android.os.Looper.getMainLooper())
+                    3000L, 0f, listener, android.os.Looper.getMainLooper())
             }.onFailure { android.util.Log.w("AppModel", "NETWORK_PROVIDER failed: ${it.message}") }
             gpsListener = listener
             android.util.Log.i("AppModel", "GPS listeners registered")
-            lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)?.let {
+            val lastKnown = lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+                ?: lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+            lastKnown?.let {
                 listener.onLocationChanged(it)
             } ?: android.util.Log.i("AppModel", "GPS no last-known fix yet")
         } catch (e: SecurityException) {
@@ -972,11 +1225,15 @@ class AppModel(private val context: Context, baseUrl: String) {
         if (nameLen == 0 || nameLen > 8 || payload.size < 11 + nameLen) return
         val nonce = ByteBuffer.wrap(payload, 3, 8).order(ByteOrder.LITTLE_ENDIAN).long
         val rawName = String(payload, 11, nameLen, Charsets.US_ASCII).trim()
-        val name = rawName.ifEmpty { species.replaceFirstChar { it.uppercase() } }
+        val name = if (rawName.isEmpty() || rawName.equals("null", ignoreCase = true)) {
+            species.replaceFirstChar { it.uppercase() }
+        } else {
+            rawName
+        }
         scope.launch {
             val ok = runCatching {
                 val updated = api.putPet(species, name)
-                _ui.value = _ui.value.copy(pet = updated)
+                _ui.update { it.copy(pet = updated) }
                 if (ble.state.value is BleLink.State.Connected) {
                     sendPetState()
                 }
@@ -998,7 +1255,8 @@ class AppModel(private val context: Context, baseUrl: String) {
             .order(java.nio.ByteOrder.LITTLE_ENDIAN).long
         scope.launch {
             val ok = runCatching {
-                _ui.value = _ui.value.copy(pet = api.petCare(date))
+                val updated = api.petCare(date)
+                _ui.update { it.copy(pet = updated) }
             }.isSuccess
             val ack = ByteArray(10)
             ack[0] = 1
@@ -1019,36 +1277,38 @@ class AppModel(private val context: Context, baseUrl: String) {
      *  unanswered question is current; when everything (or the session) is
      *  done, active=0 returns the pad to the pet screen. */
     private fun refreshQuiz(sessionIdStr: String) {
-        scope.launch {
-            val sid = runCatching { UUID.fromString(sessionIdStr) }.getOrNull() ?: return@launch
-            runCatching {
-                val q = api.quiz(sid)
-                val questions = q.getJSONArray("questions")
-                var idx = -1
-                for (i in 0 until questions.length()) {
-                    val item = questions.getJSONObject(i)
-                    if (!item.optBoolean("answered")) { idx = item.optInt("index"); break }
-                }
-                val total = questions.length()
-                val active = !q.optBoolean("completed") && idx >= 0
-                val view = buildQuizView(q, idx, total, active, null)
-                _ui.value = _ui.value.copy(quiz = view)
-                // Relay to the wearable (cheap 4-byte state; idempotent).
-                val st = ByteArray(4)
-                st[0] = 1
-                st[1] = if (active) 1 else 0
-                st[2] = (if (idx >= 0) idx else 0).toByte()
-                st[3] = total.toByte()
-                if (ble.state.value is BleLink.State.Connected) {
-                    ble.send(Frame.MSG_QUIZ_STATE, st)
-                    android.util.Log.i("AppModel",
-                        "quiz relayed active=$active idx=$idx total=$total")
-                } else {
-                    android.util.Log.w("AppModel", "quiz relay skipped: link down")
-                }
-            }.onFailure {
-                android.util.Log.w("AppModel", "quiz fetch failed: ${it.message}")
+        scope.launch { refreshQuizSync(sessionIdStr) }
+    }
+
+    private suspend fun refreshQuizSync(sessionIdStr: String) {
+        val sid = runCatching { UUID.fromString(sessionIdStr) }.getOrNull() ?: return
+        runCatching {
+            val q = api.quiz(sid)
+            val questions = q.getJSONArray("questions")
+            var idx = -1
+            for (i in 0 until questions.length()) {
+                val item = questions.getJSONObject(i)
+                if (!item.optBoolean("answered")) { idx = item.optInt("index"); break }
             }
+            val total = questions.length()
+            val active = !q.optBoolean("completed") && idx >= 0
+            val view = buildQuizView(q, idx, total, active, null)
+            _ui.update { it.copy(quiz = view) }
+            // Relay to the wearable (cheap 4-byte state; idempotent).
+            val st = ByteArray(4)
+            st[0] = 1
+            st[1] = if (active) 1 else 0
+            st[2] = (if (idx >= 0) idx else 0).toByte()
+            st[3] = total.toByte()
+            if (ble.state.value is BleLink.State.Connected) {
+                ble.send(Frame.MSG_QUIZ_STATE, st)
+                android.util.Log.i("AppModel",
+                    "quiz relayed active=$active idx=$idx total=$total")
+            } else {
+                android.util.Log.w("AppModel", "quiz relay skipped: link down")
+            }
+        }.onFailure {
+            android.util.Log.w("AppModel", "quiz fetch failed: ${it.message}")
         }
     }
 
@@ -1059,14 +1319,32 @@ class AppModel(private val context: Context, baseUrl: String) {
         val questions = q.getJSONArray("questions")
         var question: String? = null
         var options: List<String> = emptyList()
+        val parsedResults = ArrayList<QuizQuestionResult>(questions.length())
         for (i in 0 until questions.length()) {
             val item = questions.getJSONObject(i)
-            if (item.optInt("index") == currentIdx) {
-                question = item.optString("text")
-                val arr = item.optJSONArray("options")
-                options = (0 until (arr?.length() ?: 0)).map { arr!!.optString(it) }
-                break
+            val idx = item.optInt("index")
+            val text = item.optString("text")
+            val arr = item.optJSONArray("options")
+            val opts = (0 until (arr?.length() ?: 0)).map { arr!!.optString(it) }
+            if (idx == currentIdx) {
+                question = text
+                options = opts
             }
+            val answered = item.optBoolean("answered", false)
+            val choice = if (item.isNull("choice")) null else item.optInt("choice")
+            val rightIdx = if (item.isNull("right_index")) null else item.optInt("right_index")
+            val isCorrect = if (item.isNull("is_correct")) null else item.optBoolean("is_correct")
+            parsedResults.add(
+                QuizQuestionResult(
+                    index = idx,
+                    text = text,
+                    options = opts,
+                    answered = answered,
+                    choice = choice,
+                    rightIndex = rightIdx,
+                    isCorrect = isCorrect,
+                )
+            )
         }
         return QuizView(
             active = active,
@@ -1076,9 +1354,12 @@ class AppModel(private val context: Context, baseUrl: String) {
             options = options,
             myAnswered = q.optInt("my_answered"),
             myTotal = q.optInt("my_total"),
+            myCorrect = q.optInt("my_correct", 0),
             partnerAnswered = q.optInt("partner_answered"),
             partnerTotal = q.optInt("partner_total"),
+            partnerCorrect = q.optInt("partner_correct", 0),
             completed = q.optBoolean("completed"),
+            results = parsedResults,
             lastError = error,
         )
     }
@@ -1096,9 +1377,12 @@ class AppModel(private val context: Context, baseUrl: String) {
         android.util.Log.i("AppModel", "quiz answer received idx=$idx choice=$choice")
         val quiz = _ui.value.quiz ?: run {
             android.util.Log.w("AppModel", "quiz answer without quiz state; dropped")
+            if (ble.state.value is BleLink.State.Connected) {
+                ble.send(Frame.MSG_QUIZ_STATE, byteArrayOf(1, 0, 0, 0))
+            }
             return
         }
-        val sessionId = _ui.value.sessionId ?: return
+        val sessionId = _ui.value.sessionId ?: lastQuizSessionId ?: return
         scope.launch {
             runCatching {
                 val q = api.quizAnswer(sessionId, idx, choice)
@@ -1109,8 +1393,8 @@ class AppModel(private val context: Context, baseUrl: String) {
                     if (!item.optBoolean("answered")) { next = item.optInt("index"); break }
                 }
                 val active = !q.optBoolean("completed") && next >= 0
-                _ui.value = _ui.value.copy(
-                    quiz = buildQuizView(q, next, questions.length(), active, null))
+                val view = buildQuizView(q, next, questions.length(), active, null)
+                _ui.update { it.copy(quiz = view) }
                 // Tell the wearable the next question (or end of quiz).
                 val st = ByteArray(4)
                 st[0] = 1
@@ -1120,10 +1404,15 @@ class AppModel(private val context: Context, baseUrl: String) {
                 if (ble.state.value is BleLink.State.Connected) {
                     ble.send(Frame.MSG_QUIZ_STATE, st)
                 }
-            }.onFailure {
-                android.util.Log.w("AppModel", "quiz answer failed: ${it.message}")
-                _ui.value = _ui.value.copy(
-                    quiz = quiz.copy(lastError = it.message ?: "answer failed"))
+                if (q.optBoolean("completed")) {
+                    refreshDeviceStateSync()
+                    refreshPetAndAchievements()
+                }
+            }.onFailure { err ->
+                android.util.Log.w("AppModel", "quiz answer failed: ${err.message}")
+                _ui.update { cur ->
+                    cur.copy(quiz = (cur.quiz ?: quiz).copy(lastError = err.message ?: "answer failed"))
+                }
             }
         }
     }
@@ -1139,7 +1428,8 @@ class AppModel(private val context: Context, baseUrl: String) {
         val out = ByteArray(9 + 8)
         out[0] = 1 // ver
         // In Android JSONObject, optString returns "null" when the JSON value is NULL.
-        val name = if (pet.isNull("species") || pet.isNull("name")) "" else pet.optString("name", "")
+        val rawName = if (pet.isNull("species") || pet.isNull("name")) "" else pet.optString("name", "")
+        val name = if (rawName.equals("null", ignoreCase = true)) "" else rawName
         val buf = java.nio.ByteBuffer.wrap(out).order(java.nio.ByteOrder.LITTLE_ENDIAN)
         buf.putInt(1, pet.optInt("lifetime_xp", 0))
         out[5] = pet.optInt("level", 1).toByte()
@@ -1184,17 +1474,24 @@ class AppModel(private val context: Context, baseUrl: String) {
             runCatching {
                 val me = api.me()
                 val partner = me.optJSONObject("partner")
-                _ui.value = _ui.value.copy(
-                    partnered = partner != null,
-                    partnerName = partner?.optString("display_name"),
-                    partnerUserId = partner?.optString("id"))
+                _ui.update {
+                    it.copy(
+                        partnered = partner != null,
+                        partnerName = partner?.optString("display_name"),
+                        partnerUserId = partner?.optString("id"),
+                    )
+                }
             }
             runCatching {
-                _ui.value = _ui.value.copy(profile = api.discoveryProfile())
+                val prof = api.discoveryProfile()
+                _ui.update { it.copy(profile = prof) }
             }
             runCatching {
-                _ui.value = _ui.value.copy(invitations = api.invitations())
-            }.onFailure { _ui.value = _ui.value.copy(invitations = null) }
+                val inv = api.invitations()
+                _ui.update { it.copy(invitations = inv) }
+            }.onFailure {
+                _ui.update { it.copy(invitations = null) }
+            }
         }
     }
 
@@ -1205,27 +1502,34 @@ class AppModel(private val context: Context, baseUrl: String) {
             // edits, partnership end) without this phone being the actor.
             val me = api.me()
             val partner = me.optJSONObject("partner")
-            _ui.value = _ui.value.copy(
-                partnered = partner != null,
-                partnerName = partner?.optString("display_name"),
-                partnerUserId = partner?.optString("id"))
+            _ui.update {
+                it.copy(
+                    partnered = partner != null,
+                    partnerName = partner?.optString("display_name"),
+                    partnerUserId = partner?.optString("id"),
+                )
+            }
             runCatching {
-                _ui.value = _ui.value.copy(profile = api.discoveryProfile())
+                val prof = api.discoveryProfile()
+                _ui.update { it.copy(profile = prof) }
             }
             val out = api.discovery()
-            _ui.value = _ui.value.copy(discovery = out, discoveryError = null)
+            _ui.update { it.copy(discovery = out, discoveryError = null) }
             refreshInvitationsQuiet()
             relayResultsToBoard(out)
             relayModeToBoard(force = false)
         } catch (e: Exception) {
             // Connection loss: mark discovery unavailable/stale honestly
             // instead of presenting cached profiles as current matches.
-            _ui.value = _ui.value.copy(discoveryError = e.message ?: "discovery unavailable")
+            _ui.update { it.copy(discoveryError = e.message ?: "discovery unavailable") }
         }
     }
 
     private suspend fun refreshInvitationsQuiet() {
-        runCatching { _ui.value = _ui.value.copy(invitations = api.invitations()) }
+        runCatching {
+            val inv = api.invitations()
+            _ui.update { it.copy(invitations = inv) }
+        }
     }
 
     /** Desired wearable discovery mode: unpaired + any method opted in. */
@@ -1255,7 +1559,7 @@ class AppModel(private val context: Context, baseUrl: String) {
         payload[1] = mode.toByte()
         putU16(payload, 2, token ?: 0)
         ble.send(Frame.MSG_DISCOVERY_MODE, payload)
-        _ui.value = _ui.value.copy(boardModeAcked = boardAckedMode == mode)
+        _ui.update { it.copy(boardModeAcked = boardAckedMode == mode) }
     }
 
     /** Compact results (<=3) to the wearable display:
@@ -1335,7 +1639,8 @@ class AppModel(private val context: Context, baseUrl: String) {
     fun saveProfile(body: JSONObject, onResult: (Boolean, String?) -> Unit) {
         scope.launch {
             try {
-                _ui.value = _ui.value.copy(profile = api.putDiscoveryProfile(body))
+                val prof = api.putDiscoveryProfile(body)
+                _ui.update { it.copy(profile = prof) }
                 relayModeToBoard(force = true)
                 onResult(true, null)
             } catch (e: Exception) { onResult(false, e.message) }
@@ -1345,8 +1650,8 @@ class AppModel(private val context: Context, baseUrl: String) {
     fun setOptIns(bluetoothEnabled: Boolean, gpsEnabled: Boolean, onResult: (Boolean, String?) -> Unit) {
         scope.launch {
             try {
-                _ui.value = _ui.value.copy(
-                    profile = api.putDiscoverySettings(bluetoothEnabled, gpsEnabled))
+                val prof = api.putDiscoverySettings(bluetoothEnabled, gpsEnabled)
+                _ui.update { it.copy(profile = prof) }
                 relayModeToBoard(force = true)
                 onResult(true, null)
             } catch (e: Exception) { onResult(false, e.message) }

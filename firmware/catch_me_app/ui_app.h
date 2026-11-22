@@ -66,6 +66,8 @@ class UiApp {
   // (active 1->0 with a quiz under way) fires the reward banner: the
   // lecturer must SEE the XP impact on the wearable itself.
   void note_quiz_state(uint8_t active, uint8_t idx, uint8_t total) {
+    const bool was_active = quiz_active_;
+    const uint8_t prev_idx = quiz_idx_;
     if (quiz_active_ && quiz_pending_ && (!active || idx != quiz_idx_)) {
       quiz_pending_ = false;  // the server accepted our answer
     }
@@ -75,7 +77,9 @@ class UiApp {
     quiz_active_ = active != 0;
     quiz_idx_ = idx;
     quiz_total_ = total;
-    quiz_sent_ = false;  // a new question (or quiz end) resets the pad
+    if (!quiz_active_ || !was_active || idx != prev_idx) {
+      quiz_sent_ = false;  // only reset the pad on new question or quiz start/end
+    }
   }
 
   // Short (8 s) award banner overriding the current screen: title, the
@@ -94,7 +98,7 @@ class UiApp {
 
   // 10 ms tick: retransmit the pending answer until acknowledged.
   void tick_quiz() {
-    if (!quiz_active_ || !quiz_pending_) return;
+    if (!quiz_active_ || !quiz_pending_ || !g_ble.phoneReady()) return;
     const uint32_t now = millis();
     if (now - quiz_last_send_ms_ < 2000) return;
     quiz_last_send_ms_ = now;
@@ -109,13 +113,14 @@ class UiApp {
   // The four cycled screens (UR/UL navigation). SCR_INTERACTION sits AFTER
   // SCREEN_COUNT: it is only entered by the interaction-phase takeover and
   // never by the cycle.
-  enum Screen : uint8_t { SCR_PET = 0, SCR_CARE, SCR_DISC, SCREEN_COUNT, SCR_INTERACTION = SCREEN_COUNT, SCR_QUIZ };
+  enum Screen : uint8_t { SCR_PET = 0, SCR_CARE, SCR_DISC, SCR_GPS, SCREEN_COUNT, SCR_INTERACTION = SCREEN_COUNT, SCR_QUIZ };
   // (SCR_GAME removed 14 Nov: the raid quest was cut — the board-to-board
   // sustained link drops at 23-30 s, a hardware wall documented across every
   // configuration since 12 Nov. The quest set is together, explore, quiz.)
   void render_pet();
   void render_care();
   void render_disc();
+  void render_gps();
   // (render_raid removed 14 Nov with the raid quest.)
   void render_game();
   void render_interaction();
@@ -155,6 +160,16 @@ class UiApp {
   bool quiz_pending_ = false;
   uint8_t quiz_pending_choice_ = 0;
   uint32_t quiz_last_send_ms_ = 0;
+  bool explore_dismissed_ = false;
+  uint32_t quest_active_since_ms_ = 0;
+  bool quest_bt_out_of_range() const {
+    const SessionStateMsg& s = g_ble.session();
+    if (!s.active || quest_active_since_ms_ == 0) return false;
+    if (millis() - quest_active_since_ms_ < 12000UL) return false;
+    if (g_ble.phoneLinkLost(12000UL)) return true;
+    const PeerObservation& p = g_ble.last_peer();
+    return (p.device == 0 || (millis() - p.at_ms) > 15000UL);
+  }
   // Reward banner state (see flash_reward).
   char reward_title_[16] = {0};
   uint32_t reward_until_ms_ = 0;

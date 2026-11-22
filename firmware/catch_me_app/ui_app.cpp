@@ -35,6 +35,11 @@ void UiApp::tick() {
     } else if (interaction.phase >= 4) {
       screen_ = SCR_INTERACTION;
       pin_edit_ = false;
+    } else if (interaction.phase == 0) {
+      pending_command_len_ = 0;
+      if (screen_ == SCR_INTERACTION) {
+        screen_ = SCR_PET;  // leave interaction screen so reward banner & home render
+      }
     }
   }
 
@@ -47,10 +52,29 @@ void UiApp::tick() {
     screen_ = SCR_PET;  // quiz done or cancelled: back to the pet
   }
 
+  // v2 explore indoor/outdoor view: auto-takeover when explore quest is active
+  // (shows real phone GPS coordinates + fix age sent over BLE; UL/UR still navigates).
+  const SessionStateMsg& sess = g_ble.session();
+  if (sess.active != 0) {
+    if (quest_active_since_ms_ == 0) quest_active_since_ms_ = millis();
+  } else {
+    quest_active_since_ms_ = 0;
+  }
+  const bool explore_active = (sess.active != 0 && sess.quest == 2);
+  if (explore_active && !quiz_active_ && !game_view_ && !g_petcore.game_active()) {
+    if (!explore_dismissed_ && screen_ != SCR_GPS) {
+      screen_ = SCR_GPS;
+    }
+  } else {
+    if (explore_dismissed_) explore_dismissed_ = false;
+  }
+
   // Retransmit the exact same command ID/payload until Android confirms the
-  // server response. A reconnect therefore cannot create duplicate actions.
-  if (pending_command_len_ && g_ble.phoneConnected() &&
-      millis() - last_command_send_ms_ >= 1500) {
+  // server response. Wait for phoneReady() so fragments aren't lost before CCCD opens.
+  if (!g_ble.phoneReady()) {
+    last_command_send_ms_ = 0;
+  } else if (pending_command_len_ &&
+             (last_command_send_ms_ == 0 || millis() - last_command_send_ms_ >= 1200)) {
     if (g_ble.send_message(MSG_INTERACTION_COMMAND, pending_command_, pending_command_len_)) {
       last_command_send_ms_ = millis();
     }
@@ -93,6 +117,10 @@ void UiApp::tick() {
     if (pressed & TSButtonUpperRight) screen_ = SCR_PET;
     if (pressed & TSButtonUpperLeft) screen_ = SCR_PET;
     return;
+  }
+  if (screen_ == SCR_GPS && sess.active != 0 && sess.quest == 2 &&
+      (pressed & (TSButtonUpperLeft | TSButtonUpperRight))) {
+    explore_dismissed_ = true;  // let UL/UR cycle normally even during active explore
   }
   // v2 quiz pad: UL=A, UR=B, LL=C, LR=D — one press per question; the
   // phone relays the next question via MSG_QUIZ_STATE (which clears sent).
@@ -247,7 +275,7 @@ void UiApp::send_interaction_command(uint8_t kind, uint8_t stage, uint16_t code_
   memcpy(&pending_nonce_, pending_command_ + 5, 8);
   strcpy(interaction_status_, "CHECKING");
   last_command_send_ms_ = 0;
-  if (g_ble.phoneConnected() &&
+  if (g_ble.phoneReady() &&
       g_ble.send_message(MSG_INTERACTION_COMMAND, pending_command_, pending_command_len_)) {
     last_command_send_ms_ = millis();
   }
@@ -256,8 +284,14 @@ void UiApp::send_interaction_command(uint8_t kind, uint8_t stage, uint16_t code_
 void UiApp::apply_interaction_ack(const uint8_t* payload, uint16_t len) {
   if (len < 10 || payload[0] != 1 || !pending_command_len_) return;
   if (memcmp(payload + 1, &pending_nonce_, 8) != 0) return;  // stale ACK
+  const uint8_t code = payload[9];
+  if (code == 2) {
+    // Transient network/phone failure: keep pending_command_len_ armed to auto-retry.
+    strcpy(interaction_status_, "RETRYING...");
+    return;
+  }
   pending_command_len_ = 0;
-  strcpy(interaction_status_, payload[9] ? "SENT" : "RETRY NEEDED");
+  strcpy(interaction_status_, code ? "SENT" : "RETRY NEEDED");
 }
 
 void UiApp::render() {
@@ -302,6 +336,7 @@ void UiApp::render() {
     case SCR_PET: render_pet(); break;
     case SCR_CARE: render_care(); break;
     case SCR_DISC: render_disc(); break;
+    case SCR_GPS: render_gps(); break;
     case SCR_QUIZ: render_quiz(); break;
     case SCR_INTERACTION: render_interaction(); break;
     default: render_pet(); break;
@@ -310,7 +345,7 @@ void UiApp::render() {
   // stays clean (its own status line occupies the footer); interaction
   // renders its own footer.
   if (screen_ != SCR_INTERACTION && screen_ != SCR_PET && screen_ != SCR_QUIZ) {
-    static const char* kNames[SCREEN_COUNT] = {"PET", "CARE", "NEAR"};
+    static const char* kNames[SCREEN_COUNT] = {"PET", "CARE", "NEAR", "GPS"};
     display_.setFont(liberationSans_8ptFontInfo);
     display_.fontColor(TS_8b_Gray, TS_8b_Black);
     display_.setCursor(0, 58);
@@ -549,18 +584,31 @@ void UiApp::render_interaction() {
   }
 
   if (interaction.phase == 2) {
+    const SessionStateMsg& s = g_ble.session();
+    const uint32_t rem_s = s.target_ms > s.progress_ms ? (s.target_ms - s.progress_ms + 999UL) / 1000UL : 0;
     display_.print("TOGETHER TIME");
-    display_.setCursor(0, 18);
-    display_.fontColor(TS_8b_Green, TS_8b_Black);
-    display_.print("Codes confirmed");
-    display_.setCursor(0, 32);
-    display_.fontColor(TS_8b_White, TS_8b_Black);
-    display_.print("Verified BT time");
+    display_.setCursor(0, 16);
+    if (quest_bt_out_of_range()) {
+      display_.fontColor(TS_8b_Red, TS_8b_Black);
+      display_.print("! BT OUT OF RANGE !");
+      display_.setCursor(0, 29);
+      display_.fontColor(TS_8b_Yellow, TS_8b_Black);
+      display_.print("Move closer (paused)");
+    } else {
+      display_.fontColor(TS_8b_Green, TS_8b_Black);
+      display_.print("Codes confirmed");
+      display_.setCursor(0, 29);
+      display_.fontColor(TS_8b_White, TS_8b_Black);
+      display_.print("BT proximity ok");
+    }
     display_.setCursor(0, 45);
-    display_.print(g_ble.session().progress_ms / 1000);
-    display_.print(" / ");
-    display_.print(g_ble.session().target_ms / 1000);
-    display_.print(" sec");
+    display_.fontColor(TS_8b_White, TS_8b_Black);
+    display_.print(rem_s);
+    display_.print("s left (");
+    display_.print(s.progress_ms / 1000);
+    display_.print("/");
+    display_.print(s.target_ms / 1000);
+    display_.print("s)");
     return;
   }
   if (interaction.phase == 4) {
@@ -914,8 +962,13 @@ void UiApp::render_quiz() {
 
   display_.setFont(liberationSans_8ptFontInfo);
   display_.setCursor(0, 18);
-  display_.fontColor(TS_8b_Gray, TS_8b_Black);
-  display_.print("question on the phone");
+  if (quest_bt_out_of_range()) {
+    display_.fontColor(TS_8b_Red, TS_8b_Black);
+    display_.print("! BT OUT OF RANGE !");
+  } else {
+    display_.fontColor(TS_8b_Gray, TS_8b_Black);
+    display_.print("question on the phone");
+  }
 
   // Kahoot-style pad legend, one letter per button.
   display_.setCursor(0, 30);
@@ -940,6 +993,78 @@ void UiApp::render_quiz() {
   } else {
     display_.fontColor(TS_8b_White, TS_8b_Black);
     display_.print("press your answer");
+  }
+}
+
+static void format_coord_e6(char* out, size_t cap, int32_t e6) {
+  // Format microdegrees as [-]d.ddddd with integer math (no float printf on SAMD21).
+  uint32_t mag = e6 < 0 ? (uint32_t)(-(int64_t)e6) : (uint32_t)e6;
+  uint32_t e5 = (mag + 5UL) / 10UL;
+  uint32_t whole = e5 / 100000UL;
+  uint32_t frac = e5 % 100000UL;
+  snprintf(out, cap, "%s%lu.%05lu", e6 < 0 ? "-" : "", (unsigned long)whole, (unsigned long)frac);
+}
+
+void UiApp::render_gps() {
+  const SessionStateMsg& sess = g_ble.session();
+  const PhoneGpsMsg& gps = g_ble.phone_gps();
+  const bool in_explore = (sess.active != 0 && sess.quest == 2);
+
+  display_.setFont(liberationSans_8ptFontInfo);
+  display_.setCursor(0, 0);
+  display_.fontColor((in_explore && sess.demo) ? TS_8b_Yellow : TS_8b_White, TS_8b_Black);
+  display_.print(in_explore ? (sess.demo ? "EXPLORE DEMO" : "EXPLORE GPS") : "PHONE GPS");
+
+  if (gps.valid) {
+    char lat_buf[16];
+    char lon_buf[16];
+    format_coord_e6(lat_buf, sizeof(lat_buf), gps.lat_e6);
+    format_coord_e6(lon_buf, sizeof(lon_buf), gps.lon_e6);
+
+    display_.setCursor(0, 12);
+    display_.fontColor(TS_8b_Green, TS_8b_Black);
+    display_.print("Lat:");
+    display_.print(lat_buf);
+
+    display_.setCursor(0, 23);
+    display_.fontColor(TS_8b_Green, TS_8b_Black);
+    display_.print("Lon:");
+    display_.print(lon_buf);
+
+    const uint32_t rx_elapsed_s = gps.rx_at_ms ? (millis() - gps.rx_at_ms) / 1000UL : 0;
+    const uint32_t age_s = (uint32_t)gps.age_s + rx_elapsed_s;
+    display_.setCursor(0, 35);
+    display_.fontColor(age_s <= 10 ? TS_8b_White : TS_8b_Yellow, TS_8b_Black);
+    display_.print("Age:");
+    display_.print(age_s);
+    display_.print("s ");
+    display_.fontColor(g_ble.phoneConnected() ? TS_8b_Green : TS_8b_Red, TS_8b_Black);
+    display_.print(g_ble.phoneConnected() ? "BT ok" : "BT...");
+  } else {
+    display_.setCursor(0, 14);
+    display_.fontColor(TS_8b_Yellow, TS_8b_Black);
+    display_.print("GPS: waiting BT");
+    display_.setCursor(0, 26);
+    display_.fontColor(TS_8b_Gray, TS_8b_Black);
+    display_.print(g_ble.phoneConnected() ? "no fix on phone" : "link phone app");
+  }
+
+  display_.setCursor(0, 47);
+  if (in_explore && quest_bt_out_of_range()) {
+    display_.fontColor(TS_8b_Red, TS_8b_Black);
+    display_.print("! BT OUT OF RANGE !");
+  } else if (in_explore) {
+    const uint32_t rem_s = sess.target_ms > sess.progress_ms ? (sess.target_ms - sess.progress_ms + 999UL) / 1000UL : 0;
+    display_.fontColor(TS_8b_Gray, TS_8b_Black);
+    display_.print(rem_s);
+    display_.print("s left (");
+    display_.print(sess.progress_ms / 1000);
+    display_.print("/");
+    display_.print(sess.target_ms / 1000);
+    display_.print("s)");
+  } else {
+    display_.fontColor(TS_8b_Gray, TS_8b_Black);
+    display_.print(gps.valid ? "via phone BLE" : "BLE GPS screen");
   }
 }
 

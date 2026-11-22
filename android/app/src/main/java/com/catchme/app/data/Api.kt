@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  * Bearer-token authentication; the token is kept in memory + SharedPreferences
  * (no device secrets beyond the signed-in session).
  */
-class Api(private val baseUrl: String) {
+class Api(val baseUrl: String) {
 
     /** Cloudflare Access service token headers; empty strings = not sent. */
     var accessId: String? = null
@@ -55,8 +55,14 @@ class Api(private val baseUrl: String) {
                 .getOrElse { JSONObject() }
             if (!resp.isSuccessful) {
                 val err = json.optJSONObject("error")
-                throw ApiError(resp.code, err?.optString("code") ?: "error",
-                    err?.optString("message") ?: resp.message)
+                val code = err?.optString("code")?.takeIf { it.isNotBlank() } ?: "http_${resp.code}"
+                val msg = err?.optString("message")?.takeIf { it.isNotBlank() }
+                    ?: if (resp.code == 403 && text.contains("Cloudflare Access", ignoreCase = true)) {
+                        "Cloudflare Access blocked request (HTTP 403)"
+                    } else {
+                        resp.message.takeIf { it.isNotBlank() } ?: "Request failed (HTTP ${resp.code})"
+                    }
+                throw ApiError(resp.code, code, msg)
             }
             return json
         }
@@ -118,6 +124,7 @@ class Api(private val baseUrl: String) {
     )
     fun cancelSession(id: UUID): JSONObject = call("POST", "/api/v1/sessions/$id/cancel")
     fun session(id: UUID): JSONObject = call("GET", "/api/v1/sessions/$id")
+    fun listSessions(): JSONObject = call("GET", "/api/v1/sessions")
 
     fun interaction(id: UUID): JSONObject = call("GET", "/api/v1/sessions/$id/interaction")
 

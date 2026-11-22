@@ -130,10 +130,12 @@ object RecordCodec {
             JSONObject()
                 .put("observed", true)
                 .put("device_id", JSONObject.NULL) // filled by uploader via alias map
-                .put("boot_id", "d$peerDevice")     // provisional; server matches alias
+                .put("boot_id", "d$peerDevice")     // provisional; refined in resolveAliases
                 .put("heartbeat_sequence", peerHeartbeat)
-                .put("session_token", JSONObject.NULL) // resolved via alias map
+                .put("session_token", JSONObject.NULL) // resolved & verified via token hash
                 .put("observation_age_ms", peerObsAge)
+                .put("_alias", peerDevice)
+                .put("_token_hash", peerTokenHash)
         } else {
             JSONObject().put("observed", false)
         }

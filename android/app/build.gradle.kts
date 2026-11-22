@@ -24,13 +24,26 @@ android {
         // default without a rebuild.
         // Stable public URL via the Cloudflare tunnel (infra compose runs
         // cloudflared; the dashboard routes the hostname to the host API).
-        buildConfigField("String", "API_BASE", "\"https://catchme.12357895.xyz\"")
-        // Cloudflare Access service token headers (sent as CF-Access-Client-Id /
-        // CF-Access-Client-Secret when non-empty). Defaults EMPTY — secrets live
-        // in infra/.env, never in source; a launch intent pair "cf_id"/"cf_secret"
-        // supplies them per device.
-        buildConfigField("String", "CF_ACCESS_ID", "\"\"")
-        buildConfigField("String", "CF_ACCESS_SECRET", "\"\"")
+        val envFile = rootProject.file("../infra/.env")
+        val envProps = mutableMapOf<String, String>()
+        if (envFile.exists()) {
+            envFile.readLines().forEach { raw ->
+                val line = raw.trim()
+                if (line.isNotEmpty() && !line.startsWith("#") && line.contains("=")) {
+                    val idx = line.indexOf('=')
+                    envProps[line.substring(0, idx).trim()] = line.substring(idx + 1).trim()
+                }
+            }
+        }
+        val subdomain = envProps["SUBDOMAIN"]?.takeIf { it.isNotEmpty() } ?: "catchme.12357895.xyz"
+        val cfId = (envProps["CLIENT_ID"] ?: "").replace("\"", "")
+        val cfSecret = (envProps["CLIENT_SECRET"] ?: "").replace("\"", "")
+        buildConfigField("String", "API_BASE", "\"https://$subdomain\"")
+        // Cloudflare Access service token headers loaded from gitignored
+        // infra/.env at local build time (never committed in source); launch
+        // intent extras "cf_id"/"cf_secret" can still override them per device.
+        buildConfigField("String", "CF_ACCESS_ID", "\"$cfId\"")
+        buildConfigField("String", "CF_ACCESS_SECRET", "\"$cfSecret\"")
     }
 
     buildTypes {

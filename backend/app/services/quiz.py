@@ -118,7 +118,11 @@ def quiz_state(db: Session, quest_session: QuestSession, user_id: uuid.UUID) -> 
     }
     mine_total = len(questions)
     mine_answered = sum(1 for q in questions if q.question_index in answers)
-    # Partner progress: their answered count over their generated count.
+    mine_correct = sum(
+        1 for q in questions
+        if q.question_index in answers and answers[q.question_index] == q.correct_index
+    )
+    # Partner progress: their answered & correct counts over their generated set.
     partner_id = next(
         (
             row[0]
@@ -129,32 +133,44 @@ def quiz_state(db: Session, quest_session: QuestSession, user_id: uuid.UUID) -> 
         ),
         None,
     )
-    partner_total = (
+    partner_questions = (
         db.query(QuizQuestion)
         .filter(
             QuizQuestion.session_id == quest_session.id,
             QuizQuestion.answerer_user_id == partner_id,
         )
-        .count()
+        .all()
         if partner_id
-        else 0
+        else []
     )
-    partner_answered = (
-        db.query(QuizAnswer)
-        .filter(
-            QuizAnswer.session_id == quest_session.id,
-            QuizAnswer.user_id == partner_id,
-        )
-        .count()
+    partner_answers = (
+        {
+            row[0]: row[1]
+            for row in db.query(QuizAnswer.question_index, QuizAnswer.choice)
+            .filter(
+                QuizAnswer.session_id == quest_session.id,
+                QuizAnswer.user_id == partner_id,
+            )
+            .all()
+        }
         if partner_id
-        else 0
+        else {}
     )
+    partner_total = len(partner_questions)
+    partner_answered = sum(1 for q in partner_questions if q.question_index in partner_answers)
+    partner_correct = sum(
+        1 for q in partner_questions
+        if q.question_index in partner_answers and partner_answers[q.question_index] == q.correct_index
+    )
+    is_completed = quest_session.state == "completed"
     return {
-        "completed": quest_session.state == "completed",
+        "completed": is_completed,
         "my_total": mine_total,
         "my_answered": mine_answered,
+        "my_correct": mine_correct,
         "partner_total": partner_total,
         "partner_answered": partner_answered,
+        "partner_correct": partner_correct,
         "questions": [
             {
                 "index": q.question_index,
@@ -162,6 +178,8 @@ def quiz_state(db: Session, quest_session: QuestSession, user_id: uuid.UUID) -> 
                 "options": q.options,
                 "answered": q.question_index in answers,
                 "choice": answers.get(q.question_index),
+                "is_correct": (answers[q.question_index] == q.correct_index) if q.question_index in answers else None,
+                "right_index": q.correct_index if (q.question_index in answers or is_completed) else None,
             }
             for q in questions
         ],
@@ -179,7 +197,15 @@ def record_answer(
     unique row is updated), so a second press before the phone advances
     simply corrects the answer.
     """
-    if quest_session.state != "active":
+    # Lock the session row so concurrent final answers from both partners
+    # serialize cleanly and never race complete_and_award() on uq_quest_awards.
+    locked = (
+        db.query(QuestSession)
+        .filter(QuestSession.id == quest_session.id)
+        .with_for_update()
+        .one()
+    )
+    if locked.state != "active":
         from app.services.interactions import _problem
 
         raise _problem(409, "session_not_active", "This quest is no longer active.")

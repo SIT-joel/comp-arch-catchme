@@ -118,14 +118,18 @@ export interface QuizQuestion {
   options: string[];
   answered: boolean;
   choice: number | null;
+  is_correct?: boolean | null;
+  right_index?: number | null;
 }
 
 export interface QuizState {
   completed: boolean;
   my_total: number;
   my_answered: number;
+  my_correct?: number;
   partner_total: number;
   partner_answered: number;
+  partner_correct?: number;
   questions: QuizQuestion[];
 }
 

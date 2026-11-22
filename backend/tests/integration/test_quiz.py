@@ -41,8 +41,11 @@ def test_quiz_generation_on_activation(clients):
     # Every question's correct option is within the subject's interests
     # (server-side check through the DB; the client payload has no flag).
     from app.models import QuizQuestion
-    # (client payload carries no correct answer anywhere)
+    # (client payload carries no correct answer anywhere before answering)
     assert "correct_index" not in state_a["questions"][0]
+    assert state_a["questions"][0]["right_index"] is None
+    assert state_a["questions"][0]["is_correct"] is None
+    assert state_a["my_correct"] == 0 and state_a["partner_correct"] == 0
 
 
 def test_quiz_answer_flow_and_exactly_once_award(clients):
@@ -184,6 +187,13 @@ def test_quiz_completion_unlocks_achievements_and_bumps_state_version(clients, s
 
     v_after = clients["a"].get(f"/api/v1/devices/{clients['a_device']}/state").json()["state_version"]
     assert v_after > v_before
+
+    final_a = clients["a"].get(f"/api/v1/sessions/{sid}/quiz").json()
+    assert final_a["completed"] is True
+    assert final_a["my_correct"] == final_a["my_total"] == 1
+    assert final_a["partner_correct"] == final_a["partner_total"] == 1
+    assert final_a["questions"][0]["is_correct"] is True
+    assert final_a["questions"][0]["right_index"] == final_a["questions"][0]["choice"]
 
     for key in ("a", "b"):
         items = clients[key].get("/api/v1/achievements").json()["achievements"]

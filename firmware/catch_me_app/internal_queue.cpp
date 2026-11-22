@@ -34,16 +34,27 @@ bool InternalQueue::begin() {
   const uint32_t meta = CM_IQ_FLASH_ADDR;
   const uint32_t* meta_w = (const uint32_t*)meta;
   uint32_t counter = 1;
+  uint32_t epoch_seed = 0;
   if (meta_w[0] == CM_IQ_MAGIC) {
     counter = meta_w[1] + 1;  // new boot identity
+    epoch_seed = meta_w[2];
     nvm_erase_row(meta);
   } else {
     nvm_erase_row(meta);
   }
-  uint32_t page[16] = {CM_IQ_MAGIC, counter};
+  if (epoch_seed == 0 || epoch_seed == 0xFFFFFFFFul) {
+    // Full chip erase / first flash: mix ADC floating-pin noise + cycle clock
+    // so sequence 1 after flashing never collides with prior flash boots.
+    uint32_t h = micros() ^ SysTick->VAL;
+    for (int k = 0; k < 16; k++) {
+      h = (h * 1664525u + 1013904223u) ^ (uint32_t)analogRead(A4) ^ ((uint32_t)analogRead(A5) << 4);
+    }
+    epoch_seed = (h & 0xFFFFu) | 0x10000u;
+  }
+  uint32_t page[16] = {CM_IQ_MAGIC, counter, epoch_seed};
   nvm_write_page(meta, page);
-  snprintf(boot_id_, sizeof(boot_id_), "d%d-i%lu", DEVICE_ID,
-           (unsigned long)counter);
+  snprintf(boot_id_, sizeof(boot_id_), "d%d-%04x-%lu", DEVICE_ID,
+           (unsigned int)(epoch_seed & 0xFFFFu), (unsigned long)counter);
 
   // Scan for the first erased slot (append position).
   head_ = 0;
