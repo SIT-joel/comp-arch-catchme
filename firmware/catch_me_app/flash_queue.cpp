@@ -4,7 +4,8 @@
 
 FlashQueue g_queue;
 
-static const uint32_t QUEUE_MAGIC = 0x314D4D43;  // "CMM1"
+static const uint32_t QUEUE_MAGIC_V1 = 0x314D4D43;  // "CMM1" (legacy sector-0 layout)
+static const uint32_t QUEUE_MAGIC = 0x324D4D43;     // "CMM2" (sector 1+ records)
 
 bool FlashQueue::begin() {
   SerialUSB.println("fq: flash.begin");
@@ -15,7 +16,26 @@ bool FlashQueue::begin() {
   uint8_t raw[4];
   if (!flash_.read(FLASH_QUEUE_BASE_ADDR, raw, 4)) { SerialUSB.println("fq: read FAIL"); return false; }
   uint32_t magic = raw[0] | ((uint32_t)raw[1] << 8) | ((uint32_t)raw[2] << 16) | ((uint32_t)raw[3] << 24);
-  if (magic != QUEUE_MAGIC) {
+  if (magic == QUEUE_MAGIC) {
+    read_header();
+    boot_counter_ += 1;
+    write_header();  // new boot id; queue contents remain valid
+    SerialUSB.println("fq: header rewritten for new boot");
+  } else if (magic == QUEUE_MAGIC_V1) {
+    // Migrate legacy CMM1 -> CMM2 cleanly: preserve monotonic boot_counter_
+    // so server/Android telemetry identities never collide, and clear old slots.
+    read_header();
+    boot_counter_ += 1;
+    head_ = 0;
+    acked_ = 0;
+    if (!flash_.erase_sector(FLASH_QUEUE_BASE_ADDR) ||
+        !flash_.erase_sector(FLASH_QUEUE_BASE_ADDR + 0x1000UL)) {
+      SerialUSB.println("fq: migrate erase FAIL");
+      return false;
+    }
+    write_header();
+    SerialUSB.println("fq: migrated CMM1 -> CMM2");
+  } else {
     // First run (or corrupted header): reinitialize the queue area.
     SerialUSB.println("fq: erase 4 sectors");
     for (uint8_t s = 0; s < 4; s++) {
@@ -30,11 +50,6 @@ bool FlashQueue::begin() {
     acked_ = 0;
     write_header();
     SerialUSB.println("fq: header written");
-  } else {
-    read_header();
-    boot_counter_ += 1;
-    write_header();  // new boot id; queue contents remain valid
-    SerialUSB.println("fq: header rewritten for new boot");
   }
   snprintf(boot_id_, sizeof(boot_id_), "d%d-%lu", DEVICE_ID, (unsigned long)boot_counter_);
   ok_ = true;
@@ -68,7 +83,7 @@ bool FlashQueue::push(const TelemetryRecord& rec) {
   uint32_t addr = slot_addr(head_);
   // Erase the sector when we wrap to its first slot (records are 32 B; each
   // 4 KB sector holds 128 slots).
-  if (head_ % 128 == 0) {
+  if ((head_ % FLASH_QUEUE_MAX_RECORDS) % 128 == 0) {
     if (!flash_.erase_sector(addr & ~(uint32_t)0xFFF)) return false;
   }
   if (!flash_.write(addr, (const uint8_t*)&rec, sizeof(rec))) {
@@ -83,7 +98,10 @@ bool FlashQueue::push(const TelemetryRecord& rec) {
 bool FlashQueue::peek(uint16_t offset, TelemetryRecord* out) {
   if (!ok_ || offset >= pending()) return false;
   uint32_t index = acked_ + offset;
-  return flash_.read(slot_addr(index), (uint8_t*)out, sizeof(TelemetryRecord));
+  if (!flash_.read(slot_addr(index), (uint8_t*)out, sizeof(TelemetryRecord))) {
+    return false;
+  }
+  return out->uptime_ms != 0xFFFFFFFFul;
 }
 
 void FlashQueue::acknowledge(uint16_t n) {

@@ -32,10 +32,10 @@ services:
     environment:
       CM_DATABASE_URL: postgresql+psycopg://catch_me:catch_me@host.docker.internal:5432/catch_me
       CM_COOKIE_SECURE: "${CM_COOKIE_SECURE:-false}"
-      # Bench geofence (same values as the dev server's env; empty strings
-      # break pydantic float parsing, so defaults live here explicitly).
-      CM_GEOFENCE_LAT: "${CM_GEOFENCE_LAT:-1.4335105}"
-      CM_GEOFENCE_LON: "${CM_GEOFENCE_LON:-103.7766169}"
+      # Outdoor Explore geofence nearby SIT (empty strings break pydantic float
+      # parsing, so defaults live here explicitly).
+      CM_GEOFENCE_LAT: "${CM_GEOFENCE_LAT:-1.4147143170700585}"
+      CM_GEOFENCE_LON: "${CM_GEOFENCE_LON:-103.91203638248588}"
       CM_GEOFENCE_RADIUS_M: "${CM_GEOFENCE_RADIUS_M:-200}"
       CM_RAID_FIX_MAX_AGE_MS: "${CM_RAID_FIX_MAX_AGE_MS:-900000}"
     # Single worker: in-memory SSE fan-out assumes one process.

@@ -110,6 +110,7 @@ def evaluate_session(
             geofence_lat=quest_session.geofence_lat,
             geofence_lon=quest_session.geofence_lon,
             geofence_radius_m=quest_session.geofence_radius_m or settings.geofence_radius_m,
+            enforce_geofence=not quest_session.demo,
         )
     else:
         # v2: heart_challenge removed; raid progress is outcome-driven, not

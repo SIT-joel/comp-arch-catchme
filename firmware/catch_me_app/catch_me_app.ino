@@ -450,7 +450,11 @@ void loop() {
           memset(name, 0, sizeof(name));
           uint8_t name_len = payload[8] > 8 ? 8 : payload[8];
           if (name_len) memcpy(name, payload + 9, name_len);
-          g_petcore.note_server_pet(xp, payload[5], payload[6],
+          // Backend & Android send 1-based evolution_stage (1=baby, 2=teen, 3=adult);
+          // firmware PetStage is 0-based (PET_BABY=0, PET_TEEN=1, PET_ADULT=2).
+          uint8_t stage = payload[6] > 0 ? (uint8_t)(payload[6] - 1) : 0;
+          if (stage > 2) stage = 2;
+          g_petcore.note_server_pet(xp, payload[5], stage,
                                     payload[7] != 0, name);
         }
         break;

@@ -132,12 +132,13 @@ void UiApp::tick() {
       else if (pressed & TSButtonLowerLeft) choice = 2;
       else if (pressed & TSButtonLowerRight) choice = 3;
       if (choice != 0xFF) {
+        quiz_sent_ = true;
+        quiz_last_choice_ = choice;
+        quiz_pending_ = true;  // retransmit until the phone acknowledges
+        quiz_pending_choice_ = choice;
+        quiz_last_send_ms_ = 0;
         uint8_t ans[3] = {1, quiz_idx_, choice};
-        if (g_ble.send_message(MSG_QUIZ_ANSWER, ans, sizeof(ans))) {
-          quiz_sent_ = true;
-          quiz_last_choice_ = choice;
-          quiz_pending_ = true;  // retransmit until the phone acknowledges
-          quiz_pending_choice_ = choice;
+        if (g_ble.phoneReady() && g_ble.send_message(MSG_QUIZ_ANSWER, ans, sizeof(ans))) {
           quiz_last_send_ms_ = millis();
         }
       }
@@ -148,6 +149,29 @@ void UiApp::tick() {
   // v2 raid screen: REMOVED 14 Nov (the raid quest was cut — the
   // board-to-board sustained link drops at 23-30 s, a hardware wall). The
   // rotation is PET / CARE / NEAR; the quiz and PIN takeovers unchanged.
+
+  // Track Snack Catch catch/miss bursts and round completion celebrations.
+  if (g_petcore.game_active()) {
+    if (!was_game_active_) {
+      last_game_caught_ = 0;
+      last_game_missed_ = 0;
+      catch_fx_ms_ = 0;
+      miss_fx_ms_ = 0;
+      game_finish_ms_ = 0;
+    }
+    if (g_petcore.game_caught() > last_game_caught_) {
+      last_game_caught_ = g_petcore.game_caught();
+      catch_fx_ms_ = millis();
+      catch_fx_x_ = (uint8_t)g_petcore.game_basket_x();
+    }
+    if (g_petcore.game_missed() > last_game_missed_) {
+      last_game_missed_ = g_petcore.game_missed();
+      miss_fx_ms_ = millis();
+    }
+  } else if (was_game_active_) {
+    game_finish_ms_ = millis();
+  }
+  was_game_active_ = g_petcore.game_active();
 
   // Snack Catch mini-game view (launched from PET or CARE): owns the lower
   // buttons; UL exits. Tilt control (15 Nov): when the accelerometer is
@@ -172,9 +196,7 @@ void UiApp::tick() {
       // reason in red. Mid-round UR stays a no-op (no mid-play re-zero).
       if (!g_petcore.game_active()) {
         const char* err = g_petcore.game_start();
-        if (err == nullptr) {
-          g_imu.rezero();  // neutral = how the board is held right now
-        } else {
+        if (err != nullptr) {
           game_refusal_ = err;
           game_refusal_ms_ = millis();
           game_view_ = false;  // back to CARE, where the reason shows
@@ -206,18 +228,32 @@ void UiApp::tick() {
       return;
     }
     if (pressed & TSButtonLowerLeft) {
-      if (g_petcore.feed()) feed_flash_ms_ = millis();
+      if (g_petcore.feed()) {
+        feed_flash_ms_ = millis();
+        pet_anim_ms_ = 0;
+      }
     }
-    if (pressed & TSButtonLowerRight) g_petcore.pet_stroke();
+    if (pressed & TSButtonLowerRight) {
+      g_petcore.pet_stroke();
+      pet_anim_ms_ = millis();
+      feed_flash_ms_ = 0;
+    }
     // UL/UR fall through to global navigation below.
   }
 
   // v2 care screen: full care actions; UL navigates, UR starts the game.
   if (screen_ == SCR_CARE) {
     if (pressed & TSButtonLowerLeft) {
-      if (g_petcore.feed()) feed_flash_ms_ = millis();
+      if (g_petcore.feed()) {
+        feed_flash_ms_ = millis();
+        pet_anim_ms_ = 0;
+      }
     }
-    if (pressed & TSButtonLowerRight) g_petcore.pet_stroke();
+    if (pressed & TSButtonLowerRight) {
+      g_petcore.pet_stroke();
+      pet_anim_ms_ = millis();
+      feed_flash_ms_ = 0;
+    }
     if (pressed & TSButtonUpperRight) {
       // UR is ALWAYS the game button here — success enters the game view;
       // a refusal (too tired / too sick) shows on this screen for 2.5 s.
@@ -225,7 +261,6 @@ void UiApp::tick() {
       // the old fall-through sent refused starts to NEAR instead.
       const char* err = g_petcore.game_start();
       if (err == nullptr) {
-        g_imu.rezero();  // neutral = how the board is held right now
         game_view_ = true;
       } else {
         game_refusal_ = err;
@@ -344,7 +379,10 @@ void UiApp::render() {
   // Screen indicator on the last row: name + position. The tamagotchi home
   // stays clean (its own status line occupies the footer); interaction
   // renders its own footer.
-  if (screen_ != SCR_INTERACTION && screen_ != SCR_PET && screen_ != SCR_QUIZ) {
+  const bool care_overlay = (screen_ == SCR_CARE) &&
+                            (g_petcore.game_active() || game_view_ ||
+                             feed_anim_active() || pet_anim_active());
+  if (screen_ != SCR_INTERACTION && screen_ != SCR_PET && screen_ != SCR_QUIZ && !care_overlay) {
     static const char* kNames[SCREEN_COUNT] = {"PET", "CARE", "NEAR", "GPS"};
     display_.setFont(liberationSans_8ptFontInfo);
     display_.fontColor(TS_8b_Gray, TS_8b_Black);
@@ -370,6 +408,10 @@ void UiApp::render_care() {
     render_game();
     return;
   }
+  if (feed_anim_active() || pet_anim_active()) {
+    render_pet();
+    return;
+  }
   const PetState& st = g_pet.state();
 
   display_.setFont(liberationSans_10ptFontInfo);
@@ -379,8 +421,16 @@ void UiApp::render_care() {
 
   display_.setFont(liberationSans_8ptFontInfo);
   display_.setCursor(0, 14);
-  display_.fontColor(TS_8b_White, TS_8b_Black);
-  display_.print("LL feed  LR pet");
+  if (g_petcore.feed_refusal()[0]) {
+    display_.fontColor(TS_8b_Yellow, TS_8b_Black);
+    display_.print(g_petcore.feed_refusal());
+  } else if (feed_flash_ms_ != 0 && millis() - feed_flash_ms_ < 1500) {
+    display_.fontColor(TS_8b_Green, TS_8b_Black);
+    display_.print("fed!");
+  } else {
+    display_.fontColor(TS_8b_White, TS_8b_Black);
+    display_.print("LL feed  LR pet");
+  }
   display_.setCursor(0, 24);
   if (millis() - game_refusal_ms_ < 2500 && game_refusal_[0]) {
     // The refusal string carries its own fix hint ("sad - LR pet").
@@ -425,16 +475,6 @@ void UiApp::render_care() {
   } else {
     display_.fontColor(TS_8b_Green, TS_8b_Black);
     display_.print("care: synced");
-  }
-
-  if (g_petcore.feed_refusal()[0]) {
-    display_.setCursor(0, 14);
-    display_.fontColor(TS_8b_Yellow, TS_8b_Black);
-    display_.print(g_petcore.feed_refusal());
-  } else if (millis() - feed_flash_ms_ < 1500) {
-    display_.setCursor(0, 14);
-    display_.fontColor(TS_8b_Green, TS_8b_Black);
-    display_.print("fed!");
   }
 }
 
@@ -677,13 +717,28 @@ void UiApp::render_interaction() {
 
 // ---- v2 pet rendering (ported from the bench-verified pet fork) ----
 
+// Extra 8-bit TinyScreen RGB332/BGR233 palette accents (TinyScreen.h: BBGGGRRR).
+static const uint8_t kColOrange = 0x0F;
+static const uint8_t kColPink   = 0xC3;
+static const uint8_t kColCyan   = 0xFC;
+
+static void safe_pixel(TinyScreen& d, int x, int y, uint8_t color) {
+  if (x >= 0 && x < 96 && y >= 0 && y < 64) {
+    d.drawPixel((uint8_t)x, (uint8_t)y, color);
+  }
+}
+
 static void fill_row(TinyScreen& d, int x0, int x1, int y, uint8_t color) {
+  if (y < 0 || y >= 64) return;
+  if (x0 < 0) x0 = 0;
+  if (x1 > 95) x1 = 95;
   if (x1 < x0) return;
   d.drawLine((uint8_t)x0, (uint8_t)y, (uint8_t)x1, (uint8_t)y, color);
 }
 
 // Filled ellipse via integer row half-widths (no FPU on SAMD21).
 static void fill_ellipse(TinyScreen& d, int cx, int cy, int rx, int ry, uint8_t color) {
+  if (rx <= 0 || ry <= 0) return;
   for (int dy = -ry; dy <= ry; dy++) {
     int t = ((ry * ry - dy * dy) << 8) / (ry * ry);  // 0..256
     int hw = (rx * t) >> 8;
@@ -691,67 +746,147 @@ static void fill_ellipse(TinyScreen& d, int cx, int cy, int rx, int ry, uint8_t 
   }
 }
 
-static void draw_heart(TinyScreen& d, int x, int y) {
-  d.drawPixel(x + 1, y + 0, TS_8b_Red);
-  d.drawPixel(x + 3, y + 0, TS_8b_Red);
-  d.drawPixel(x + 0, y + 1, TS_8b_Red);
-  d.drawPixel(x + 2, y + 1, TS_8b_Red);
-  d.drawPixel(x + 4, y + 1, TS_8b_Red);
-  d.drawPixel(x + 1, y + 2, TS_8b_Red);
-  d.drawPixel(x + 3, y + 2, TS_8b_Red);
-  d.drawPixel(x + 2, y + 3, TS_8b_Red);
+static void draw_heart(TinyScreen& d, int x, int y, uint8_t color = TS_8b_Red) {
+  safe_pixel(d, x + 1, y + 0, color);
+  safe_pixel(d, x + 3, y + 0, color);
+  safe_pixel(d, x + 0, y + 1, color);
+  safe_pixel(d, x + 2, y + 1, color);
+  safe_pixel(d, x + 4, y + 1, color);
+  safe_pixel(d, x + 1, y + 2, color);
+  safe_pixel(d, x + 3, y + 2, color);
+  safe_pixel(d, x + 2, y + 3, color);
 }
 
+static void draw_big_heart(TinyScreen& d, int x, int y, uint8_t color) {
+  safe_pixel(d, x + 1, y + 0, color);
+  safe_pixel(d, x + 2, y + 0, color);
+  safe_pixel(d, x + 4, y + 0, color);
+  safe_pixel(d, x + 5, y + 0, color);
+  fill_row(d, x + 0, x + 6, y + 1, color);
+  fill_row(d, x + 0, x + 6, y + 2, color);
+  fill_row(d, x + 1, x + 5, y + 3, color);
+  fill_row(d, x + 2, x + 4, y + 4, color);
+  safe_pixel(d, x + 3, y + 5, color);
+}
+
+static void draw_sparkle(TinyScreen& d, int cx, int cy, uint8_t size, uint8_t color) {
+  safe_pixel(d, cx, cy, color);
+  safe_pixel(d, cx - 1, cy, color);
+  safe_pixel(d, cx + 1, cy, color);
+  safe_pixel(d, cx, cy - 1, color);
+  safe_pixel(d, cx, cy + 1, color);
+  if (size >= 2) {
+    safe_pixel(d, cx - 2, cy, color);
+    safe_pixel(d, cx + 2, cy, color);
+    safe_pixel(d, cx, cy - 2, color);
+    safe_pixel(d, cx, cy + 2, color);
+  }
+}
+
+static void draw_treat(TinyScreen& d, int cx, int cy) {
+  // 5x5 juicy berry/snack treat with top leaf + highlight.
+  safe_pixel(d, cx, cy - 3, TS_8b_Green);
+  safe_pixel(d, cx + 1, cy - 3, TS_8b_Green);
+  fill_row(d, cx - 1, cx + 1, cy - 2, TS_8b_Red);
+  fill_row(d, cx - 2, cx + 2, cy - 1, TS_8b_Red);
+  fill_row(d, cx - 2, cx + 2, cy + 0, kColOrange);
+  fill_row(d, cx - 1, cx + 1, cy + 1, kColOrange);
+  safe_pixel(d, cx - 1, cy - 1, TS_8b_Yellow);  // shine
+}
+
+// anim_mode: 0=idle/mood, 1=eat open mouth, 2=eat chomp+blush, 3=joy (^ ^ eyes + blush)
 static void draw_pet_sprite(TinyScreen& d, uint8_t species, uint8_t mood, uint8_t frame,
-                            int cx, int cy) {
+                            int cx, int cy, uint8_t anim_mode = 0,
+                            int rx_delta = 0, int ry_delta = 0, int y_off = 0) {
   const uint8_t body = species == SPECIES_SPARK  ? TS_8b_Yellow
                        : species == SPECIES_FLUFF ? TS_8b_White
                                                   : TS_8b_Blue;
   int dy = (mood == PET_MOOD_HAPPY && frame) ? 1 : 0;
-  if (mood == PET_MOOD_SLEEPING) dy = 1;
+  if (mood == PET_MOOD_SLEEPING && anim_mode == 0) dy = 1;
+  const int fy = cy + dy + y_off;
 
   if (species == SPECIES_FLUFF) {  // bunny: two long ears
-    fill_row(d, cx - 6, cx - 5, cy - 12 + dy, body);
-    fill_row(d, cx - 6, cx - 5, cy - 11 + dy, body);
-    fill_row(d, cx + 4, cx + 5, cy - 12 + dy, body);
-    fill_row(d, cx + 4, cx + 5, cy - 11 + dy, body);
+    fill_row(d, cx - 6, cx - 5, fy - 12, body);
+    fill_row(d, cx - 6, cx - 5, fy - 11, body);
+    fill_row(d, cx + 4, cx + 5, fy - 12, body);
+    fill_row(d, cx + 4, cx + 5, fy - 11, body);
   } else if (species == SPECIES_PIP) {  // cat: triangle ears
-    d.drawPixel(cx - 6, cy - 10 + dy, body);
-    d.drawPixel(cx - 5, cy - 11 + dy, body);
-    fill_row(d, cx - 6, cx - 4, cy - 10 + dy, body);
-    d.drawPixel(cx + 6, cy - 10 + dy, body);
-    d.drawPixel(cx + 5, cy - 11 + dy, body);
-    fill_row(d, cx + 4, cx + 6, cy - 10 + dy, body);
-  } else {  // Spark: antenna with a flame tip
-    d.drawLine(cx, cy - 9 + dy, cx, cy - 12 + dy, TS_8b_Gray);
-    d.drawPixel(cx, cy - 13 + dy, frame ? TS_8b_Red : TS_8b_Yellow);
+    safe_pixel(d, cx - 6, fy - 10, body);
+    safe_pixel(d, cx - 5, fy - 11, body);
+    fill_row(d, cx - 6, cx - 4, fy - 10, body);
+    safe_pixel(d, cx + 6, fy - 10, body);
+    safe_pixel(d, cx + 5, fy - 11, body);
+    fill_row(d, cx + 4, cx + 6, fy - 10, body);
+  } else {  // Spark: antenna with glowing flame tip
+    d.drawLine((uint8_t)cx, (uint8_t)max(0, fy - 9), (uint8_t)cx, (uint8_t)max(0, fy - 12), TS_8b_Gray);
+    safe_pixel(d, cx, fy - 13, (anim_mode != 0) ? kColOrange : (frame ? TS_8b_Red : TS_8b_Yellow));
+    if (anim_mode != 0) {
+      safe_pixel(d, cx, fy - 14, TS_8b_Yellow);
+    }
   }
 
-  fill_ellipse(d, cx, cy + dy, 10, 8, body);
+  fill_ellipse(d, cx, fy, 10 + rx_delta, 8 + ry_delta, body);
 
   const uint8_t ink = TS_8b_Black;
-  const int fy = cy + dy;
+  if (anim_mode == 3) {
+    // Joyful ^ ^ arched eyes + rosy cheeks + wide smile
+    safe_pixel(d, cx - 5, fy - 2, ink);
+    safe_pixel(d, cx - 4, fy - 3, ink);
+    safe_pixel(d, cx - 3, fy - 2, ink);
+    safe_pixel(d, cx + 3, fy - 2, ink);
+    safe_pixel(d, cx + 4, fy - 3, ink);
+    safe_pixel(d, cx + 5, fy - 2, ink);
+    fill_row(d, cx - 7, cx - 5, fy + 1, kColPink);
+    fill_row(d, cx + 5, cx + 7, fy + 1, kColPink);
+    safe_pixel(d, cx - 3, fy + 2, ink);
+    fill_row(d, cx - 2, cx + 2, fy + 3, ink);
+    safe_pixel(d, cx + 3, fy + 2, ink);
+    return;
+  }
+  if (anim_mode == 1) {
+    // Eager open-mouth anticipation / biting
+    fill_row(d, cx - 4, cx - 4, fy - 3, ink);
+    safe_pixel(d, cx - 4, fy - 2, ink);
+    safe_pixel(d, cx + 4, fy - 3, ink);
+    safe_pixel(d, cx + 4, fy - 2, ink);
+    fill_row(d, cx - 2, cx + 2, fy + 1, ink);
+    fill_row(d, cx - 2, cx + 2, fy + 2, TS_8b_Red);
+    fill_row(d, cx - 1, cx + 1, fy + 3, ink);
+    return;
+  }
+  if (anim_mode == 2) {
+    // Happy chewing grin + rosy cheeks
+    fill_row(d, cx - 5, cx - 3, fy - 2, ink);
+    fill_row(d, cx + 3, cx + 5, fy - 2, ink);
+    fill_row(d, cx - 7, cx - 5, fy + 1, kColPink);
+    fill_row(d, cx + 5, cx + 7, fy + 1, kColPink);
+    safe_pixel(d, cx - 2, fy + 2, ink);
+    fill_row(d, cx - 1, cx + 1, fy + 3, ink);
+    safe_pixel(d, cx + 2, fy + 2, ink);
+    return;
+  }
+
   if (mood == PET_MOOD_SLEEPING) {
     fill_row(d, cx - 5, cx - 3, fy - 2, ink);  // closed eyes
     fill_row(d, cx + 3, cx + 5, fy - 2, ink);
     fill_row(d, cx - 1, cx + 1, fy + 2, ink);  // small mouth
   } else {
-    d.drawPixel(cx - 4, fy - 3, ink);
-    d.drawPixel(cx - 4, fy - 2, ink);
-    d.drawPixel(cx + 4, fy - 3, ink);
-    d.drawPixel(cx + 4, fy - 2, ink);
+    safe_pixel(d, cx - 4, fy - 3, ink);
+    safe_pixel(d, cx - 4, fy - 2, ink);
+    safe_pixel(d, cx + 4, fy - 3, ink);
+    safe_pixel(d, cx + 4, fy - 2, ink);
     if (mood == PET_MOOD_HAPPY) {
-      d.drawPixel(cx - 2, fy + 2, ink);
-      d.drawPixel(cx - 1, fy + 3, ink);
-      d.drawPixel(cx, fy + 3, ink);
-      d.drawPixel(cx + 1, fy + 3, ink);
-      d.drawPixel(cx + 2, fy + 2, ink);
+      safe_pixel(d, cx - 2, fy + 2, ink);
+      safe_pixel(d, cx - 1, fy + 3, ink);
+      safe_pixel(d, cx, fy + 3, ink);
+      safe_pixel(d, cx + 1, fy + 3, ink);
+      safe_pixel(d, cx + 2, fy + 2, ink);
     } else if (mood == PET_MOOD_SAD || mood == PET_MOOD_SICK) {
-      d.drawPixel(cx - 2, fy + 3, ink);
-      d.drawPixel(cx - 1, fy + 2, ink);
-      d.drawPixel(cx, fy + 2, ink);
-      d.drawPixel(cx + 1, fy + 2, ink);
-      d.drawPixel(cx + 2, fy + 3, ink);
+      safe_pixel(d, cx - 2, fy + 3, ink);
+      safe_pixel(d, cx - 1, fy + 2, ink);
+      safe_pixel(d, cx, fy + 2, ink);
+      safe_pixel(d, cx + 1, fy + 2, ink);
+      safe_pixel(d, cx + 2, fy + 3, ink);
     } else if (mood == PET_MOOD_TIRED) {
       fill_row(d, cx - 2, cx + 2, fy + 2, ink);
     } else {
@@ -761,45 +896,146 @@ static void draw_pet_sprite(TinyScreen& d, uint8_t species, uint8_t mood, uint8_
 }
 
 void UiApp::render_game() {
+  const uint32_t now = millis();
   if (g_petcore.game_active()) {
+    const bool catch_fx = catch_fx_ms_ != 0 && now - catch_fx_ms_ < 450UL;
+    const bool miss_fx = miss_fx_ms_ != 0 && now - miss_fx_ms_ < 350UL;
     display_.setFont(liberationSans_8ptFontInfo);
     display_.setCursor(0, 0);
-    display_.fontColor(TS_8b_White, TS_8b_Black);
+    display_.fontColor(catch_fx ? TS_8b_Yellow : TS_8b_White, TS_8b_Black);
     display_.print("C:");
     display_.print(g_petcore.game_caught());
+    display_.fontColor(miss_fx ? TS_8b_Red : TS_8b_Gray, TS_8b_Black);
     display_.print(" M:");
     display_.print(g_petcore.game_missed());
     display_.print("/");
     display_.print(CM_GAME_MAX_MISSES);
-
-    // Lane guides: dotted rails between the three lanes.
-    for (uint8_t gy = 8; gy < 50; gy += 4) {
-      display_.drawPixel(31, gy, TS_8b_Gray);
-      display_.drawPixel(63, gy, TS_8b_Gray);
+    if (miss_fx) {
+      display_.setCursor(60, 0);
+      display_.fontColor(TS_8b_Red, TS_8b_Black);
+      display_.print("MISS!");
     }
 
+    // Lane guides: highlight active lane boundaries in cyan.
+    const uint8_t lane = g_petcore.game_lane();
+    const uint8_t col_l = (lane <= 1) ? kColCyan : TS_8b_Gray;
+    const uint8_t col_r = (lane >= 1) ? kColCyan : TS_8b_Gray;
+    for (uint8_t gy = 10; gy < 50; gy += 4) {
+      safe_pixel(display_, 31, gy, col_l);
+      safe_pixel(display_, 63, gy, col_r);
+    }
+
+    // Falling treats with motion shine pixel above.
     int8_t sx[3], sy[3];
     const uint8_t n = g_petcore.game_snacks(sx, sy, 3);
     for (uint8_t k = 0; k < n; k++) {
-      display_.drawRect((uint8_t)sx[k] - 1, (uint8_t)sy[k] + 4, 3, 3, 1, TS_8b_Yellow);
+      safe_pixel(display_, sx[k], sy[k] + 1, TS_8b_Yellow);
+      draw_treat(display_, sx[k], sy[k] + 5);
     }
-    const uint8_t bx = (uint8_t)g_petcore.game_basket_x();
-    display_.drawRect(bx - 8, 52, 17, 4, 1, TS_8b_Brown);
-    display_.drawRect(bx - 8, 52, 17, 1, 1, TS_8b_DarkBrown);
+
+    // Mini-pet peeking out from behind the basket.
+    const int bx = g_petcore.game_basket_x();
+    const int shake = miss_fx ? (((now / 60UL) & 1) ? 2 : -2) : 0;
+    const int px = bx + shake;
+    const uint8_t sp = g_pet.state().species;
+    const uint8_t pcol = sp == SPECIES_SPARK ? TS_8b_Yellow
+                       : sp == SPECIES_FLUFF ? TS_8b_White
+                                             : TS_8b_Blue;
+    for (int py = 49; py <= 53; py++) fill_row(display_, px - 3, px + 3, py, pcol);
+    if (sp == SPECIES_FLUFF) {
+      fill_row(display_, px - 3, px - 2, 47, pcol);
+      fill_row(display_, px + 2, px + 3, 47, pcol);
+      fill_row(display_, px - 3, px - 2, 48, pcol);
+      fill_row(display_, px + 2, px + 3, 48, pcol);
+    } else if (sp == SPECIES_PIP) {
+      safe_pixel(display_, px - 3, 47, pcol);
+      fill_row(display_, px - 3, px - 2, 48, pcol);
+      safe_pixel(display_, px + 3, 47, pcol);
+      fill_row(display_, px + 2, px + 3, 48, pcol);
+    } else {
+      safe_pixel(display_, px, 48, TS_8b_Gray);
+      safe_pixel(display_, px, 47, catch_fx ? kColOrange : TS_8b_Red);
+    }
+    safe_pixel(display_, px - 2, 51, TS_8b_Black);
+    safe_pixel(display_, px + 2, 51, TS_8b_Black);
+
+    // Basket (flashes gold on catch).
+    const int bleft = max(0, bx - 9);
+    const int bw = min(19, 96 - bleft);
+    display_.drawRect((uint8_t)bleft, 54, (uint8_t)bw, 5, 1,
+                      catch_fx ? TS_8b_Yellow : TS_8b_Brown);
+    display_.drawRect((uint8_t)bleft, 54, (uint8_t)bw, 1, 1,
+                      catch_fx ? kColOrange : TS_8b_DarkBrown);
+
+    // Catch burst sparkles + floating +1!
+    if (catch_fx) {
+      const uint32_t dt = now - catch_fx_ms_;
+      const int rad = (int)(dt / 55UL) + 2;
+      draw_sparkle(display_, catch_fx_x_ - rad, 46 - rad / 2, 1, TS_8b_Yellow);
+      draw_sparkle(display_, catch_fx_x_ + rad, 46 - rad / 2, 1, TS_8b_Yellow);
+      safe_pixel(display_, catch_fx_x_, 42 - rad, TS_8b_White);
+      safe_pixel(display_, catch_fx_x_ - rad / 2, 49, TS_8b_Green);
+      safe_pixel(display_, catch_fx_x_ + rad / 2, 49, TS_8b_Green);
+      const int tx = min(78, max(2, (int)catch_fx_x_ - 6));
+      const int ty = max(10, 40 - (int)(dt / 45UL));
+      display_.setCursor((uint8_t)tx, (uint8_t)ty);
+      display_.fontColor(TS_8b_Green, TS_8b_Black);
+      display_.print("+1");
+    }
+    if (miss_fx) {
+      fill_row(display_, 0, 95, 62, TS_8b_Red);
+      fill_row(display_, 0, 95, 63, TS_8b_Red);
+    }
+    return;
+  }
+
+  // Round-end animated celebration (2.2 s).
+  if (game_finish_anim_active()) {
+    const uint32_t dt = now - game_finish_ms_;
+    const uint8_t step = (uint8_t)(dt / 150UL);
+    const uint8_t sp = g_pet.state().species;
+    const uint8_t caught = g_petcore.game_caught();
+    const int hop = (step & 1) ? -3 : 0;
+    display_.setFont(liberationSans_8ptFontInfo);
+    display_.setCursor(14, 0);
+    display_.fontColor(TS_8b_Yellow, TS_8b_Black);
+    display_.print(caught > 0 ? "GREAT PLAY!" : "GOOD TRY!");
+
+    draw_pet_sprite(display_, sp, PET_MOOD_HAPPY, step & 1, 48, 28,
+                    caught > 0 ? 3 : 0, 0, 0, hop);
+    for (uint8_t k = 0; k < 6; k++) {
+      const int sx = (k * 17 + step * 7) % 88 + 4;
+      const int sy = 12 + ((k * 11 + step * 5) % 34);
+      const uint8_t col = (k % 3 == 0) ? TS_8b_Yellow : (k % 3 == 1) ? kColCyan : kColPink;
+      draw_sparkle(display_, sx, sy, (k + step) & 1 ? 2 : 1, col);
+    }
+
+    int happy = (int)caught * CM_GAME_HAPPY_PER_CATCH;
+    if (happy > CM_GAME_HAPPY_CAP) happy = CM_GAME_HAPPY_CAP;
+    display_.setCursor(6, 52);
+    display_.fontColor(TS_8b_Green, TS_8b_Black);
+    display_.print("+");
+    display_.print(happy);
+    display_.print("J  Got:");
+    display_.print(caught);
     return;
   }
 
   display_.setFont(liberationSans_10ptFontInfo);
-  display_.setCursor(0, 12);
+  display_.setCursor(0, 6);
   display_.fontColor(TS_8b_White, TS_8b_Black);
   display_.print("Snack Catch");
-  display_.setCursor(0, 28);
   display_.setFont(liberationSans_8ptFontInfo);
+  display_.setCursor(0, 22);
+  display_.fontColor(TS_8b_Green, TS_8b_Black);
+  display_.print("Caught: ");
+  display_.print(g_petcore.game_caught());
+  display_.setCursor(0, 34);
   display_.fontColor(TS_8b_Gray, TS_8b_Black);
-  display_.print("Tilt: flick lane");
-  display_.setCursor(0, 40);
+  display_.print("Tilt or LL/LR lane");
+  display_.setCursor(0, 46);
   display_.fontColor(TS_8b_Yellow, TS_8b_Black);
-  display_.print("LL/LR lane, UL: exit");
+  display_.print("UR: play  UL: exit");
 }
 
 void UiApp::render_pet() {
@@ -878,13 +1114,76 @@ void UiApp::render_pet() {
 
   const uint8_t mood = g_petcore.mood();
   const int cy = 26;
-  draw_pet_sprite(display_, st.species, mood, g_petcore.anim_frame(), 48, cy);
+  const uint32_t now = millis();
+  const bool eating = feed_anim_active();
+  const bool petting = !eating && pet_anim_active();
 
-  if (g_petcore.hearts_visible()) {
-    const int hy = cy - 14 - (g_petcore.anim_frame() ? 1 : 0);
-    draw_heart(display_, 30, hy);
-    draw_heart(display_, 46, hy - 2);
-    draw_heart(display_, 62, hy);
+  if (eating) {
+    const uint32_t dt = now - feed_flash_ms_;
+    if (dt < 600UL) {
+      // Phase 1: parabolic snack toss into open mouth.
+      const int p = (int)(dt * 100UL / 600UL);  // 0..100
+      const int tx = 8 + (38 * p) / 100;
+      const int arc = (p * (100 - p)) / 180;   // up to ~14 px arc
+      const int ty = 30 - arc;
+      draw_pet_sprite(display_, st.species, mood, 0, 48, cy, 1, 0, 0, -1);
+      draw_treat(display_, tx, ty);
+      safe_pixel(display_, tx - 3, ty + 1, TS_8b_Yellow);
+    } else if (dt < 1300UL) {
+      // Phase 2: squash-and-stretch chomp + flying crumbs.
+      const bool bite = ((dt / 150UL) & 1) == 0;
+      draw_pet_sprite(display_, st.species, mood, 0, 48, cy,
+                      bite ? 1 : 2, bite ? 0 : 2, bite ? 1 : -2, 0);
+      const int d = (int)((dt - 600UL) / 95UL) + 3;
+      safe_pixel(display_, 48 - d, 24 - d / 2, kColOrange);
+      safe_pixel(display_, 48 + d, 24 - d / 2, kColOrange);
+      safe_pixel(display_, 48 - d - 2, 29, TS_8b_Yellow);
+      safe_pixel(display_, 48 + d + 2, 29, TS_8b_Yellow);
+      safe_pixel(display_, 48 - d / 2, 33 + d / 3, TS_8b_Red);
+      safe_pixel(display_, 48 + d / 2, 33 + d / 3, TS_8b_Red);
+    } else {
+      // Phase 3: joyful post-meal hop + sparkles.
+      const int hop = (dt < 1550UL) ? -4 : -2;
+      draw_pet_sprite(display_, st.species, PET_MOOD_HAPPY, 0, 48, cy, 3, -1, 1, hop);
+      const uint8_t tw = ((dt / 120UL) & 1) ? 2 : 1;
+      draw_sparkle(display_, 28, 18, tw, TS_8b_Yellow);
+      draw_sparkle(display_, 68, 18, 3 - tw, TS_8b_White);
+      draw_sparkle(display_, 30, 32, 3 - tw, kColOrange);
+      draw_sparkle(display_, 66, 32, tw, TS_8b_Yellow);
+    }
+  } else if (petting) {
+    const uint32_t dt = now - pet_anim_ms_;
+    const uint8_t step = (uint8_t)(dt / 100UL);
+    const int rx_d = (step % 4 == 1) ? 2 : 0;
+    const int ry_d = (step % 4 == 1) ? -1 : 0;
+    const int y_hop = (step % 4 == 2) ? -3 : (step % 4 == 3) ? -1 : 0;
+    draw_pet_sprite(display_, st.species, PET_MOOD_HAPPY, 0, 48, cy, 3, rx_d, ry_d, y_hop);
+
+    // Sweeping gentle patting arc above the pet's head for the first 0.9 s.
+    if (dt < 900UL) {
+      const uint8_t phase = (uint8_t)((dt / 100UL) % 6);
+      const int hx = 40 + (phase <= 3 ? (int)phase * 5 : (int)(6 - phase) * 5);
+      fill_row(display_, hx - 3, hx + 3, 12, TS_8b_White);
+      fill_row(display_, hx - 2, hx + 2, 13, kColPink);
+    }
+
+    // Five floating big & small hearts + twinkling sparkles.
+    const int p = (int)(dt * 24UL / 2000UL);
+    draw_big_heart(display_, 22 + ((step & 1) ? 1 : -1), 26 - p, TS_8b_Red);
+    draw_big_heart(display_, 67 + ((step & 1) ? -1 : 1), 28 - p, kColPink);
+    draw_heart(display_, 45, 14 - (p * 2) / 3, TS_8b_Red);
+    draw_heart(display_, 31, 32 - p / 2, kColPink);
+    draw_heart(display_, 59, 32 - p / 2, TS_8b_Red);
+    draw_sparkle(display_, 18, 16, (step & 1) ? 2 : 1, TS_8b_Yellow);
+    draw_sparkle(display_, 78, 16, (step & 1) ? 1 : 2, TS_8b_White);
+  } else {
+    draw_pet_sprite(display_, st.species, mood, g_petcore.anim_frame(), 48, cy);
+    if (g_petcore.hearts_visible()) {
+      const int hy = cy - 14 - (g_petcore.anim_frame() ? 1 : 0);
+      draw_heart(display_, 30, hy);
+      draw_heart(display_, 46, hy - 2);
+      draw_heart(display_, 62, hy);
+    }
   }
 
   // Need bars: H(hunger) J(joy) E(energy).
@@ -922,11 +1221,22 @@ void UiApp::render_pet() {
     display_.print("EVOLVED!");
   }
 
-  // Mood / status line (brief feed feedback overrides it for 1.5 s).
+  // Mood / status line (animated care feedback takes priority).
   display_.setCursor(0, 52);
-  if (millis() - feed_flash_ms_ < 1500) {
+  if (eating) {
     display_.fontColor(TS_8b_Green, TS_8b_Black);
-    display_.print("fed!");
+    display_.print("YUM! +25H +8E");
+    return;
+  }
+  if (petting) {
+    uint32_t ymd = 0;
+    uint64_t nonce = 0;
+    display_.fontColor(kColPink, TS_8b_Black);
+    if (g_petcore.care_event_pending(&ymd, &nonce)) {
+      display_.print("LOVE! +10 XP");
+    } else {
+      display_.print("LOVE! +5J");
+    }
     return;
   }
   if (g_petcore.lonely()) {

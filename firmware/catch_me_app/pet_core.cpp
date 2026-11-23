@@ -142,7 +142,7 @@ void PetCore::tick() {
   }
 
   // Retransmit an unacknowledged care event like interaction commands.
-  if (care_pending_ && g_ble.phoneConnected() &&
+  if (care_pending_ && g_ble.phoneReady() &&
       now - care_last_send_ms_ >= 1500) {
     // Wire format (matches AppModel.handlePetCareEvent):
     //   [0] ver, [1] kind, [2..11] date ASCII 'YYYY-MM-DD', [12..19] nonce LE64.
@@ -171,7 +171,7 @@ void PetCore::tick() {
 
   // Retransmit an unacknowledged pet identity (species + name) on bond or
   // when the server mirror still has no pet.
-  if (identity_pending_ && bonded() && g_ble.phoneConnected() &&
+  if (identity_pending_ && bonded() && g_ble.phoneReady() &&
       now - identity_last_send_ms_ >= 3000) {
     const PetState& st = g_pet.state();
     uint8_t name_len = (uint8_t)strnlen(st.name, 8);
@@ -196,12 +196,15 @@ void PetCore::tick() {
 
 void PetCore::check_evolution() {
   const PetStage s = (PetStage)g_pet.state().server_stage;
-  if (s != last_stage_) {
+  if (s > last_stage_) {
     last_stage_ = s;
     ev_evolve_pending_ = 1;
     persist_soon();
     SerialLog.print("pet_core: evolved to stage ");
     SerialLog.println((uint8_t)s);
+  } else if (s < last_stage_) {
+    last_stage_ = s;
+    persist_soon();
   }
 }
 
@@ -244,7 +247,10 @@ void PetCore::note_server_pet(uint32_t xp, uint8_t level, uint8_t stage,
     st.name[sizeof(st.name) - 1] = 0;
     persist_soon();
   }
-  (void)cared_today;  // the server cap is absolute; the wearable shows sync
+  if (!cared_today && date_ymd_ != 0 && st.care_last_ymd == date_ymd_) {
+    st.care_last_ymd = 0;
+    persist_soon();
+  }
   SerialLog.print("pet_core: server sync xp=");
   SerialLog.print(xp);
   SerialLog.print(" level=");
@@ -396,6 +402,7 @@ bool PetCore::feed() {
   PetState& st = g_pet.state();
   if (st.hunger > 90) {
     feed_refusal_ = "not hungry";
+    feed_refusal_until_ms_ = millis() + 2500UL;
     return false;
   }
   // v2: feeding is free (the fork's local snack economy is gone; the
@@ -407,6 +414,7 @@ bool PetCore::feed() {
   // snack now recharges a little, so demo play can continue immediately.
   st.energy = (uint8_t)min(100, (int)st.energy + CM_FEED_ENERGY);
   feed_refusal_ = "";
+  feed_refusal_until_ms_ = 0;
   queue_care_event();
   persist_soon();
   SerialLog.println("pet_core: fed");
@@ -455,7 +463,18 @@ const char* PetCore::game_start() {
   game_missed_ = 0;
   game_lane_ = 1;
   tilt_armed_ = true;
-  rest_tilt_ = g_imu.available() ? g_imu.tilt() : 0;  // start unbiased
+  last_tilt_dir_ = 0;
+  peak_tilt_ = 0;
+  last_tilt_ms_ = 0;
+  neutral_since_ms_ = 0;
+  s_pet_prng ^= micros();
+  if (s_pet_prng == 0) s_pet_prng = 0x9E3779B9;
+  (void)pet_prng_next();
+  last_spawn_lane_ = 0xFF;
+  pending_spawn_lane_ = 0xFF;
+  same_lane_streak_ = 0;
+  g_imu.rezero();
+  rest_tilt_ = 0;  // rezero() just captured current neutral -> tilt == 0
   game_basket_x_ = kLaneX[1];
   for (uint8_t k = 0; k < 3; k++) {
     snack_x_[k] = -1;
@@ -480,32 +499,85 @@ void PetCore::game_move(int8_t dir) {
 }
 
 void PetCore::game_move_tilt(int8_t x) {
-  // Swipe-style lane steps (18 Nov, third iteration): thresholds are
-  // RELATIVE to the player's RESTING hold, not absolute level. The trace
-  // showed the rest bias sits at tilt +29 — outside the absolute +-20
-  // re-arm band — so every flick demanded an over-straightened "super
-  // sharp" return before the next one registered. The rest point is a
-  // slow EMA absorbed only while the hand is near it, so a held extreme
-  // never drags it; one flick = one lane from wherever the hand rests.
+  // Swipe-style 3-lane tilt control with return-bounce suppression and
+  // reliable 3rd-lane reachability:
+  //  1. Opposite-direction lockout (550 ms) stops return-to-neutral swings
+  //     from snapping the platform back.
+  //  2. Re-arm via EITHER returning within |off| < 28 OR backing off >= 22
+  //     from the flick peak (while |off| < 38) for 80 ms — works even with
+  //     ~15 deg natural wrist hold bias.
+  //  3. Continuing/holding a deeper tilt (|off| >= 60) in the SAME
+  //     direction for 350 ms advances one more lane (lane 0 -> 1 -> 2),
+  //     so both double-flick and push-further reach the 3rd lane smoothly.
   if (!game_active_) return;
+  const uint32_t now = millis();
   const int16_t off = (int16_t)x - rest_tilt_;
-  if (off > -30 && off < 30) {
-    rest_tilt_ += off / 8;  // absorb hold drift (~0.4 s settling)
+
+  // Gently absorb slow resting drift only while armed and near neutral.
+  if (tilt_armed_ && off > -25 && off < 25) {
+    rest_tilt_ += off / 12;
   }
+
   if (tilt_armed_) {
-    // Commit at 45 from rest (user-confirmed feel, 18 Nov: the lighter 30
-    // threshold registered steps the player did not intend).
-    if (off >= 45 && game_lane_ < 2) {
-      game_lane_++;
-      tilt_armed_ = false;
-    } else if (off <= -45 && game_lane_ > 0) {
-      game_lane_--;
-      tilt_armed_ = false;
-    } else if (off >= 45 || off <= -45) {
-      tilt_armed_ = false;  // bounce off the end lane consumes the arm
+    const int8_t dir = (off >= 42) ? 1 : (off <= -42) ? -1 : 0;
+    if (dir != 0) {
+      if (last_tilt_dir_ != 0 && dir == -last_tilt_dir_ &&
+          (now - last_tilt_ms_) < 550UL) {
+        // Suppress return-swing overshoot in the opposite direction.
+        tilt_armed_ = false;
+        neutral_since_ms_ = 0;
+        peak_tilt_ = x;
+      } else {
+        if (dir > 0 && game_lane_ < 2) {
+          game_lane_++;
+        } else if (dir < 0 && game_lane_ > 0) {
+          game_lane_--;
+        }
+        tilt_armed_ = false;
+        neutral_since_ms_ = 0;
+        last_tilt_dir_ = dir;
+        last_tilt_ms_ = now;
+        peak_tilt_ = x;
+      }
     }
-  } else if (off > -20 && off < 20) {
-    tilt_armed_ = true;     // back near rest: the next flick is armed
+  } else {
+    // Track furthest excursion in the last flick direction.
+    if ((last_tilt_dir_ > 0 && x > peak_tilt_) ||
+        (last_tilt_dir_ < 0 && x < peak_tilt_)) {
+      peak_tilt_ = x;
+    }
+
+    // Option A: sustained deeper tilt in the SAME direction steps one more
+    // lane (makes reaching lane 2 from lane 1 effortless by tilting further).
+    if (last_tilt_dir_ > 0 && off >= 60 && game_lane_ < 2 &&
+        (now - last_tilt_ms_) >= 350UL) {
+      game_lane_++;
+      last_tilt_ms_ = now;
+      peak_tilt_ = x;
+      neutral_since_ms_ = 0;
+    } else if (last_tilt_dir_ < 0 && off <= -60 && game_lane_ > 0 &&
+               (now - last_tilt_ms_) >= 350UL) {
+      game_lane_--;
+      last_tilt_ms_ = now;
+      peak_tilt_ = x;
+      neutral_since_ms_ = 0;
+    } else {
+      // Option B: re-arm once hand backs off from peak or returns near rest.
+      const int16_t drop = (last_tilt_dir_ > 0) ? ((int16_t)peak_tilt_ - x)
+                         : (last_tilt_dir_ < 0) ? ((int16_t)x - peak_tilt_)
+                                                : 100;
+      const bool near_rest = (off > -28 && off < 28) ||
+                             (drop >= 22 && off > -38 && off < 38);
+      if (near_rest) {
+        if (neutral_since_ms_ == 0) neutral_since_ms_ = now;
+        if (now - neutral_since_ms_ >= 80UL) {
+          tilt_armed_ = true;
+          neutral_since_ms_ = 0;
+        }
+      } else {
+        neutral_since_ms_ = 0;
+      }
+    }
   }
   note_activity();
 }
@@ -539,30 +611,62 @@ void PetCore::game_step(uint32_t now) {
     }
   }
 
-  // Spawning: keep up to 2 snacks falling, in a random lane, with a
-  // minimum vertical gap — a new snack waits until every existing one
-  // has fallen CM_GAME_SNACK_MIN_GAP px, so two never stack near the
-  // top (user request 18 Nov; catches stay individually reachable).
+  // Spawning: keep up to 2 snacks falling with lane-distance-aware vertical
+  // spacing so cross-lane sequences (e.g. far left <-> right) give plenty
+  // of travel time before the next fruit drops.
   uint8_t falling = 0;
   for (uint8_t k = 0; k < 3; k++) {
     if (snack_x_[k] >= 0) falling++;
   }
   if (falling < 2 && now >= game_next_spawn_ms_) {
+    // Pick the next lane ONCE and hold it across gap checks (never re-roll
+    // while waiting — re-rolling heavily favored the shorter 22 px same-lane
+    // threshold over the 34/44 px cross-lane thresholds).
+    if (pending_spawn_lane_ == 0xFF) {
+      uint8_t cand = (uint8_t)(pet_prng_next() % 3);
+      if (last_spawn_lane_ != 0xFF && cand == last_spawn_lane_ &&
+          same_lane_streak_ >= 2) {
+        cand = (uint8_t)((last_spawn_lane_ + 1 + (pet_prng_next() & 1)) % 3);
+      }
+      pending_spawn_lane_ = cand;
+    }
+    const uint8_t next_lane = pending_spawn_lane_;
     bool clear = true;
     for (uint8_t k = 0; k < 3; k++) {
-      if (snack_x_[k] >= 0 && snack_y_[k] < CM_GAME_SNACK_MIN_GAP) clear = false;
+      if (snack_x_[k] < 0) continue;
+      const uint8_t existing_lane = (snack_x_[k] == (int8_t)kLaneX[0]) ? 0
+                                  : (snack_x_[k] == (int8_t)kLaneX[1]) ? 1 : 2;
+      const uint8_t lane_dist = (uint8_t)(next_lane > existing_lane
+                                              ? next_lane - existing_lane
+                                              : existing_lane - next_lane);
+      const int min_gap = (lane_dist == 0) ? CM_GAME_SNACK_MIN_GAP_SAME
+                        : (lane_dist == 1) ? CM_GAME_SNACK_MIN_GAP_ADJ
+                                           : CM_GAME_SNACK_MIN_GAP_FAR;
+      if (snack_y_[k] < min_gap) {
+        clear = false;
+        break;
+      }
     }
     if (clear) {
       for (uint8_t k = 0; k < 3; k++) {
         if (snack_x_[k] < 0) {
-          snack_x_[k] = (int8_t)kLaneX[pet_prng_next() % 3];
+          snack_x_[k] = (int8_t)kLaneX[next_lane];
           snack_y_[k] = 0;
           break;
         }
       }
-      game_next_spawn_ms_ = now + 900 - (uint32_t)min(500, (int)game_caught_ * 40);
+      if (last_spawn_lane_ == 0xFF) {
+        same_lane_streak_ = 2;  // guarantee fruit #2 switches lanes at round start
+      } else if (next_lane == last_spawn_lane_) {
+        same_lane_streak_++;
+      } else {
+        same_lane_streak_ = 1;
+      }
+      last_spawn_lane_ = next_lane;
+      pending_spawn_lane_ = 0xFF;
+      game_next_spawn_ms_ = now + 1100 - (uint32_t)min(450, (int)game_caught_ * 30);
     } else {
-      game_next_spawn_ms_ = now + 150;  // re-check after a short gap
+      game_next_spawn_ms_ = now + 100;  // keep committed lane until cross-lane gap opens
     }
   }
 

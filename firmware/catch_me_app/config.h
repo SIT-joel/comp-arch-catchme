@@ -54,7 +54,7 @@
 // --- Flash (ASD2202-R-F) ---
 #define FLASH_CS 5
 #define FLASH_QUEUE_BASE_ADDR 0x00010000UL  // keep sector 0 for metadata
-#define FLASH_QUEUE_MAX_RECORDS 2000        // bounded ring, ~2000 records
+#define FLASH_QUEUE_MAX_RECORDS 1920        // 15 x 4KB sectors (0x11000..0x1FFFF), clear of sector 0 & pet_store
 
 // --- Wireling pulse sensor (AST1041, MAX30101 over the ASD2022 adapter) ---
 // The adapter mux (TCA9548A at 0x70) selects the Wireling port; the sensor
@@ -101,15 +101,15 @@
 // drift (~0.9 s/cycle), so the scan/advertise windows sweep past each
 // other within a couple of minutes regardless of reconnect timing.
 #if DEVICE_ID == 2
-#define CM_TDD_LINKED_MS 4000
-#define CM_TDD_PREADV_MS 900
-#define CM_TDD_SCAN_MS 1800
-#define CM_TDD_ADV_MS 2200
+#define CM_TDD_LINKED_MS 3600
+#define CM_TDD_PREADV_MS 800
+#define CM_TDD_SCAN_MS 2200
+#define CM_TDD_ADV_MS 1900
 #else
 #define CM_TDD_LINKED_MS 3500
 #define CM_TDD_PREADV_MS 0
-#define CM_TDD_SCAN_MS 1800
-#define CM_TDD_ADV_MS 2200
+#define CM_TDD_SCAN_MS 1700
+#define CM_TDD_ADV_MS 1900
 #endif
 
 // --- v2 raid gate experiment ---
@@ -150,7 +150,9 @@
 
 // --- Snack Catch mini-game: 3 lanes, tilt picks the lane ---
 #define CM_GAME_STEP_MS 100UL                 // ~10 Hz step
-#define CM_GAME_SNACK_MIN_GAP 20              // min px between spawn and any snack
+#define CM_GAME_SNACK_MIN_GAP_SAME 22         // min px when next fruit is in the same lane
+#define CM_GAME_SNACK_MIN_GAP_ADJ 34          // min px when next fruit is 1 lane away
+#define CM_GAME_SNACK_MIN_GAP_FAR 44          // min px when next fruit is 2 lanes away (far left <-> right)
 #define CM_GAME_ENERGY_COST 10
 #define CM_GAME_MAX_MISSES 3
 #define CM_GAME_HAPPY_PER_CATCH 3

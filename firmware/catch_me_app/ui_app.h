@@ -98,14 +98,19 @@ class UiApp {
 
   // 10 ms tick: retransmit the pending answer until acknowledged.
   void tick_quiz() {
-    if (!quiz_active_ || !quiz_pending_ || !g_ble.phoneReady()) return;
+    if (!quiz_active_ || !quiz_pending_) return;
+    if (!g_ble.phoneReady()) {
+      quiz_last_send_ms_ = 0;
+      return;
+    }
     const uint32_t now = millis();
-    if (now - quiz_last_send_ms_ < 2000) return;
-    quiz_last_send_ms_ = now;
-    uint8_t ans[3] = {1, quiz_idx_, quiz_pending_choice_};
-    if (g_ble.send_message(MSG_QUIZ_ANSWER, ans, sizeof(ans))) {
-      quiz_sent_ = true;
-      quiz_last_choice_ = quiz_pending_choice_;
+    if (quiz_last_send_ms_ == 0 || now - quiz_last_send_ms_ >= 2000) {
+      uint8_t ans[3] = {1, quiz_idx_, quiz_pending_choice_};
+      if (g_ble.send_message(MSG_QUIZ_ANSWER, ans, sizeof(ans))) {
+        quiz_last_send_ms_ = now;
+        quiz_sent_ = true;
+        quiz_last_choice_ = quiz_pending_choice_;
+      }
     }
   }
 
@@ -142,7 +147,24 @@ class UiApp {
   uint32_t last_command_send_ms_ = 0;
   char interaction_status_[20] = {0};
   bool game_view_ = false;  // v2: Snack Catch view on the pet/care screens
-  uint32_t feed_flash_ms_ = 0;  // brief "fed!" / refusal feedback
+  uint32_t feed_flash_ms_ = 0;  // feed treat/chomp animation start
+  uint32_t pet_anim_ms_ = 0;    // stroke love/hearts animation start
+  uint32_t catch_fx_ms_ = 0;    // Snack Catch burst start
+  uint8_t catch_fx_x_ = 48;     // Snack Catch burst horizontal center
+  uint32_t miss_fx_ms_ = 0;     // Snack Catch miss flash start
+  uint32_t game_finish_ms_ = 0; // Snack Catch celebration start
+  uint8_t last_game_caught_ = 0;
+  uint8_t last_game_missed_ = 0;
+  bool was_game_active_ = false;
+  bool feed_anim_active() const {
+    return feed_flash_ms_ != 0 && millis() - feed_flash_ms_ < 1800UL;
+  }
+  bool pet_anim_active() const {
+    return pet_anim_ms_ != 0 && millis() - pet_anim_ms_ < 2000UL;
+  }
+  bool game_finish_anim_active() const {
+    return game_finish_ms_ != 0 && millis() - game_finish_ms_ < 2200UL;
+  }
   // Game-start refusal ("too tired" / "too sick") shown on CARE for 2.5 s.
   const char* game_refusal_ = "";
   uint32_t game_refusal_ms_ = 0;
@@ -177,7 +199,9 @@ class UiApp {
 
  public:
   bool wants_fast_render() const {
-    return (screen_ == SCR_PET || screen_ == SCR_CARE) && game_view_;
+    return (screen_ == SCR_PET || screen_ == SCR_CARE) &&
+           (game_view_ || g_petcore.game_active() || feed_anim_active() ||
+            pet_anim_active() || game_finish_anim_active());
   }
 
  private:

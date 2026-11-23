@@ -1,12 +1,13 @@
 // Flash-backed queue of unsent telemetry records (ASD2202-R-F, SPIMemory).
 //
 // Layout from FLASH_QUEUE_BASE_ADDR:
-//   [0..3]   magic 'CMQ1'
-//   [4..7]   boot counter (u32 LE) — incremented once per boot; the boot id
-//            string combines DEVICE_ID and this counter
-//   [8..11]  head index (next record slot to write; u32 LE)
-//   [12..15] acked index (all records before this are server-acknowledged; u32 LE)
-//   [16..]   record slots, sizeof(TelemetryRecord) each
+//   Sector 0 (0x0000..0x0FFF): metadata header only (erased on write_header):
+//     [0..3]   magic 'CMM2'
+//     [4..7]   boot counter (u32 LE) — incremented once per boot; the boot id
+//              string combines DEVICE_ID and this counter
+//     [8..11]  head index (next record slot to write; u32 LE)
+//     [12..15] acked index (all records before this are server-acknowledged; u32 LE)
+//   Sectors 1..15 (0x1000..): record slots, sizeof(TelemetryRecord) each
 //
 // Head/acked indices are written only after the record data they describe, so
 // a power loss mid-write loses at most the newest record, never the queue.
@@ -46,7 +47,7 @@ class FlashQueue {
   void write_header();
   void read_header();
   uint32_t slot_addr(uint32_t index) {
-    return FLASH_QUEUE_BASE_ADDR + 16 + (index % FLASH_QUEUE_MAX_RECORDS) * sizeof(TelemetryRecord);
+    return FLASH_QUEUE_BASE_ADDR + 0x1000UL + (index % FLASH_QUEUE_MAX_RECORDS) * sizeof(TelemetryRecord);
   }
 
   W25Q flash_;

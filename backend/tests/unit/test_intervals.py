@@ -287,3 +287,90 @@ def test_explore_boundary_50m_is_inclusive():
     b = [record(i, at(t), peer_device=DEVICE_A, peer_boot="a", peer_heartbeat=i + 1,
                 gps_valid=True, gps_lat=lat, gps_lon=lon, fix_age=0) for i, t in enumerate(times)]
     assert explore_ms(a, b) == 4_000
+
+
+def test_explore_non_demo_enforces_sit_geofence():
+    sit_lat, sit_lon = 1.4147143170700585, 103.91203638248588
+    times = [0, 2, 4]
+    a_in = [record(i, at(t), peer_heartbeat=i + 1, gps_valid=True, gps_lat=sit_lat, gps_lon=sit_lon, fix_age=0) for i, t in enumerate(times)]
+    b_in = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="a", peer_heartbeat=i + 1,
+               gps_valid=True, gps_lat=sit_lat, gps_lon=sit_lon, fix_age=0)
+        for i, t in enumerate(times)
+    ]
+    assert evidence.total_ms(
+        evidence.explore_intervals(
+            a_in, b_in,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            gps_stale_max_ms=GPS_STALE,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=200.0,
+            enforce_geofence=True,
+        )
+    ) == 4_000
+
+    a_out = [record(i, at(t), peer_heartbeat=i + 1, gps_valid=True, gps_lat=1.4335, gps_lon=103.7766, fix_age=0) for i, t in enumerate(times)]
+    b_out = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="a", peer_heartbeat=i + 1,
+               gps_valid=True, gps_lat=1.4335, gps_lon=103.7766, fix_age=0)
+        for i, t in enumerate(times)
+    ]
+    assert evidence.total_ms(
+        evidence.explore_intervals(
+            a_out, b_out,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            gps_stale_max_ms=GPS_STALE,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=200.0,
+            enforce_geofence=True,
+        )
+    ) == 0
+
+
+def test_explore_demo_indoor_allows_any_fresh_gps_but_requires_valid_gps_and_peer():
+    sit_lat, sit_lon = 1.4147143170700585, 103.91203638248588
+    times = [0, 2, 4]
+    a = [record(i, at(t), peer_heartbeat=i + 1, gps_valid=True, gps_lat=1.4335, gps_lon=103.7766, fix_age=0) for i, t in enumerate(times)]
+    b = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="a", peer_heartbeat=i + 1,
+               gps_valid=True, gps_lat=1.4335, gps_lon=103.7766, fix_age=0)
+        for i, t in enumerate(times)
+    ]
+    assert evidence.total_ms(
+        evidence.explore_intervals(
+            a, b,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            gps_stale_max_ms=GPS_STALE,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=200.0,
+            enforce_geofence=False,
+        )
+    ) == 4_000
+
+    a_invalid_gps = [record(i, at(t), peer_heartbeat=i + 1, gps_valid=False) for i, t in enumerate(times)]
+    assert evidence.total_ms(
+        evidence.explore_intervals(
+            a_invalid_gps, b,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            gps_stale_max_ms=GPS_STALE,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=200.0,
+            enforce_geofence=False,
+        )
+    ) == 0
+
+    b_stale_gps = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="a", peer_heartbeat=i + 1,
+               gps_valid=True, gps_lat=1.4335, gps_lon=103.7766, fix_age=15_000)
+        for i, t in enumerate(times)
+    ]
+    assert evidence.total_ms(
+        evidence.explore_intervals(
+            a, b_stale_gps,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            gps_stale_max_ms=GPS_STALE,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=200.0,
+            enforce_geofence=False,
+        )
+    ) == 0

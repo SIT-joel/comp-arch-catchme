@@ -2,6 +2,12 @@
 evaluated at the trigger points (pet care here; quest completion and
 partnership acceptance in their own tests)."""
 
+from datetime import datetime, timedelta, timezone
+
+
+def _day(days_ago: int) -> str:
+    return (datetime.now(timezone.utc).date() - timedelta(days=days_ago)).isoformat()
+
 
 def test_catalog_route_lists_achievements(clients):
     r = clients["a"].get("/api/v1/achievements")
@@ -17,7 +23,7 @@ def test_catalog_route_lists_achievements(clients):
 def test_new_friend_unlocks_on_care_trigger(clients):
     # The seeded pair are already partnered; the care action is an
     # evaluation trigger — "new_friend" unlocks for the actor immediately.
-    r = clients["a"].post("/api/v1/me/pet/care", json={"date": "2026-11-15"})
+    r = clients["a"].post("/api/v1/me/pet/care", json={"date": _day(0)})
     assert r.status_code == 200, r.text
     items = clients["a"].get("/api/v1/achievements").json()["achievements"]
     unlocked = {i["id"]: i["unlocked"] for i in items}
@@ -30,7 +36,7 @@ def test_new_friend_unlocks_on_care_trigger(clients):
 
 def test_care_streak_3_unlocks_after_three_days(clients):
     a = clients["a"]
-    for date in ("2026-11-13", "2026-11-14", "2026-11-15"):
+    for date in (_day(2), _day(1), _day(0)):
         r = a.post("/api/v1/me/pet/care", json={"date": date})
         assert r.status_code == 200, r.text
     items = a.get("/api/v1/achievements").json()["achievements"]
@@ -40,14 +46,14 @@ def test_care_streak_3_unlocks_after_three_days(clients):
 
 def test_unlock_idempotent_across_triggers(clients):
     a = clients["a"]
-    for date in ("2026-11-14", "2026-11-15"):
+    for date in (_day(1), _day(0)):
         assert a.post("/api/v1/me/pet/care", json={"date": date}).status_code == 200
     items = a.get("/api/v1/achievements").json()["achievements"]
     new_friend = next(i for i in items if i["id"] == "new_friend")
     assert new_friend["unlocked"] is True
     unlocked_at = new_friend["unlocked_at"]
     # Repeated triggers must not duplicate or re-stamp the row.
-    a.post("/api/v1/me/pet/care", json={"date": "2026-11-15"})
+    a.post("/api/v1/me/pet/care", json={"date": _day(0)})
     items2 = a.get("/api/v1/achievements").json()["achievements"]
     new_friend2 = next(i for i in items2 if i["id"] == "new_friend")
     assert new_friend2["unlocked_at"] == unlocked_at

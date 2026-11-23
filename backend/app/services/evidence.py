@@ -266,6 +266,7 @@ def explore_intervals(
     geofence_lat: float,
     geofence_lon: float,
     geofence_radius_m: float,
+    enforce_geofence: bool = True,
 ) -> list[Interval]:
     peer = peer_presence_intervals(
         records_a, records_b, device_a, device_b, session_token,
@@ -275,7 +276,8 @@ def explore_intervals(
         [
             (p.fix_time, p.fix_time + timedelta(milliseconds=gps_stale_max_ms))
             for p in gps_points(records_a, clock_uncertainty_max_ms)
-            if haversine_m(p.latitude, p.longitude, geofence_lat, geofence_lon)
+            if not enforce_geofence
+            or haversine_m(p.latitude, p.longitude, geofence_lat, geofence_lon)
             <= geofence_radius_m
         ]
     )
@@ -283,7 +285,8 @@ def explore_intervals(
         [
             (p.fix_time, p.fix_time + timedelta(milliseconds=gps_stale_max_ms))
             for p in gps_points(records_b, clock_uncertainty_max_ms)
-            if haversine_m(p.latitude, p.longitude, geofence_lat, geofence_lon)
+            if not enforce_geofence
+            or haversine_m(p.latitude, p.longitude, geofence_lat, geofence_lon)
             <= geofence_radius_m
         ]
     )

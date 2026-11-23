@@ -64,7 +64,9 @@ class PetCore {
   // --- Care (PET screen lower buttons) ---
   void wipe_for_rebond();        // bench: factory-reset to the bonding flow
   bool feed();                   // refused only when the pet is full
-  const char* feed_refusal() const { return feed_refusal_; }
+  const char* feed_refusal() const {
+    return (feed_refusal_until_ms_ != 0 && millis() < feed_refusal_until_ms_) ? feed_refusal_ : "";
+  }
   void pet_stroke();             // hearts burst
   bool can_play() const;         // false while sick (the pet refuses)
   void note_activity();          // any button press resets the nap timer
@@ -115,8 +117,15 @@ class PetCore {
   uint8_t game_lane_ = 1;        // selected lane 0..2
   bool tilt_armed_ = true;       // one lane step per tilt gesture
   int8_t rest_tilt_ = 0;         // slow-absorbed resting hold (flick base)
+  int8_t last_tilt_dir_ = 0;     // last committed flick direction (-1/+1)
+  int8_t peak_tilt_ = 0;         // furthest tilt reached during current flick
+  uint32_t last_tilt_ms_ = 0;    // timestamp of last committed flick
+  uint32_t neutral_since_ms_ = 0; // continuous time held inside neutral band
   uint32_t game_last_step_ms_ = 0;
   uint32_t game_next_spawn_ms_ = 0;
+  uint8_t last_spawn_lane_ = 0xFF;     // last spawned lane (0..2, 0xFF = none)
+  uint8_t pending_spawn_lane_ = 0xFF;  // committed next lane waiting for gap
+  uint8_t same_lane_streak_ = 0;       // consecutive spawns in last_spawn_lane_
   int8_t snack_x_[3] = {-1, -1, -1};
   int8_t snack_y_[3] = {0, 0, 0};
   uint32_t award_flash_until_ms_ = 0;
@@ -158,6 +167,7 @@ class PetCore {
   uint8_t name_len_ = 0;
   char name_buf_[9] = {0};
   const char* feed_refusal_ = "";
+  uint32_t feed_refusal_until_ms_ = 0;
 };
 
 extern PetCore g_petcore;
