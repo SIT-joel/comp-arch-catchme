@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Explore geofence: no default real-world destination is invented.
     geofence_lat: float | None = None
     geofence_lon: float | None = None
-    geofence_radius_m: float = 50.0
+    geofence_radius_m: float = 1000.0
 
     # Raid landmark gate (v2): both participants' phone fixes within this
     # radius of the session's landmark, fixes no older than this at check.
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     # Evidence rules from the specification
     peer_gap_max_ms: int = 20_000
-    gps_stale_max_ms: int = 10_000
+    gps_stale_max_ms: int = 30_000
     heart_rate_carry_max_ms: int = 3_000
     clock_uncertainty_max_ms: int = 2_000
 

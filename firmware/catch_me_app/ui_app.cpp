@@ -1388,7 +1388,7 @@ void UiApp::render_gps() {
     const uint32_t rx_elapsed_s = gps.rx_at_ms ? (millis() - gps.rx_at_ms) / 1000UL : 0;
     const uint32_t age_s = (uint32_t)gps.age_s + rx_elapsed_s;
     display_.setCursor(0, 35);
-    display_.fontColor(age_s <= 10 ? TS_8b_White : TS_8b_Yellow, TS_8b_Black);
+    display_.fontColor(age_s <= 30 ? TS_8b_White : TS_8b_Yellow, TS_8b_Black);
     display_.print("Age:");
     display_.print(age_s);
     display_.print("s ");

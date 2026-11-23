@@ -303,8 +303,27 @@ def test_explore_non_demo_enforces_sit_geofence():
             a_in, b_in,
             device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
             peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
-            gps_stale_max_ms=GPS_STALE,
-            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=200.0,
+            gps_stale_max_ms=30_000,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=1000.0,
+            enforce_geofence=True,
+        )
+    ) == 4_000
+
+    # Nearby SIT (~750 m away) with 18 s GPS age completes cleanly under 1000 m / 30 s tolerance.
+    near_lat, near_lon = 1.4215, 103.9120
+    a_near = [record(i, at(t), peer_heartbeat=i + 1, gps_valid=True, gps_lat=near_lat, gps_lon=near_lon, fix_age=18_000) for i, t in enumerate(times)]
+    b_near = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="a", peer_heartbeat=i + 1,
+               gps_valid=True, gps_lat=near_lat, gps_lon=near_lon, fix_age=18_000)
+        for i, t in enumerate(times)
+    ]
+    assert evidence.total_ms(
+        evidence.explore_intervals(
+            a_near, b_near,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            gps_stale_max_ms=30_000,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=1000.0,
             enforce_geofence=True,
         )
     ) == 4_000
@@ -320,8 +339,25 @@ def test_explore_non_demo_enforces_sit_geofence():
             a_out, b_out,
             device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
             peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
-            gps_stale_max_ms=GPS_STALE,
-            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=200.0,
+            gps_stale_max_ms=30_000,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=1000.0,
+            enforce_geofence=True,
+        )
+    ) == 0
+
+    a_stale = [record(i, at(t), peer_heartbeat=i + 1, gps_valid=True, gps_lat=near_lat, gps_lon=near_lon, fix_age=35_000) for i, t in enumerate(times)]
+    b_stale = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="a", peer_heartbeat=i + 1,
+               gps_valid=True, gps_lat=near_lat, gps_lon=near_lon, fix_age=35_000)
+        for i, t in enumerate(times)
+    ]
+    assert evidence.total_ms(
+        evidence.explore_intervals(
+            a_stale, b_stale,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            gps_stale_max_ms=30_000,
+            geofence_lat=sit_lat, geofence_lon=sit_lon, geofence_radius_m=1000.0,
             enforce_geofence=True,
         )
     ) == 0
