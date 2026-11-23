@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,6 +31,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -199,9 +203,9 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                 Text("Wearable link")
                 Text(
                     when (bleState) {
-                        BleLink.State.Idle -> "idle"
-                        BleLink.State.Scanning -> "scanning…"
-                        BleLink.State.Connecting -> "connecting…"
+                        BleLink.State.Idle -> if (ui.bleLinkHealthy) "connected (syncing…)" else "idle"
+                        BleLink.State.Scanning -> if (ui.bleLinkHealthy) "connected (syncing…)" else "scanning…"
+                        BleLink.State.Connecting -> if (ui.bleLinkHealthy) "connected (syncing…)" else "reconnecting…"
                         is BleLink.State.Connected -> "connected"
                         is BleLink.State.Failed -> (bleState as BleLink.State.Failed).reason
                     }
@@ -335,6 +339,62 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                     active.interactionSummary?.let { summary ->
                         Text(summary, style = MaterialTheme.typography.bodySmall)
                     }
+                    if (active.questId == "together" && active.state == "active" &&
+                        (active.interactionPhase == "start_pin" || active.interactionPhase == "end_pin")
+                    ) {
+                        val stageKey = active.interactionStage
+                            ?: if (active.interactionPhase == "start_pin") "start" else "end"
+                        val stageTitle = if (active.interactionPhase == "start_pin") "Start PIN" else "End PIN"
+                        var pinInput by remember(active.sessionId, active.interactionPhase) { mutableStateOf("") }
+                        Text(
+                            "Your $stageTitle: ${active.ownPin ?: "----"}",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        ui.pinVerifyStatus?.let { status ->
+                            Text(
+                                status,
+                                color = if (ui.pinVerifyIsError) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (!active.myPinConfirmed) {
+                            Text(
+                                "Enter partner's 4-digit PIN on TinyScreen+ or verify here",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            OutlinedTextField(
+                                value = pinInput,
+                                onValueChange = { raw ->
+                                    if (raw.length <= 4 && raw.all { it.isDigit() }) {
+                                        pinInput = raw
+                                    }
+                                },
+                                label = { Text("Partner's 4-digit PIN") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    enabled = pinInput.length == 4 && !ui.pinVerifyBusy && !questBusy,
+                                    onClick = {
+                                        questError = null
+                                        model.submitPinFromApp(active.sessionId, stageKey, pinInput) { ok, _ ->
+                                            if (ok) pinInput = ""
+                                        }
+                                    },
+                                ) { Text("Verify PIN") }
+                                Button(
+                                    enabled = !ui.pinVerifyBusy && !questBusy,
+                                    onClick = {
+                                        questError = null
+                                        model.refreshPinFromApp(active.sessionId, stageKey) { _, _ -> }
+                                    },
+                                ) { Text("Refresh my PIN") }
+                            }
+                        }
+                    }
                     ui.proximityAlert?.let { alertMsg ->
                         Text(
                             "⚠ $alertMsg",
@@ -362,6 +422,31 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                     if (active.state == "pending" && !active.needsMyAccept) {
                         Text("Waiting for partner to accept…", style = MaterialTheme.typography.bodySmall)
                     }
+                    var showCancelConfirm by remember(active.sessionId) { mutableStateOf(false) }
+                    if (showCancelConfirm) {
+                        AlertDialog(
+                            onDismissRequest = { showCancelConfirm = false },
+                            title = { Text("Cancel active quest?") },
+                            text = { Text("Are you sure you want to leave this active quest? Progress so far may be lost.") },
+                            confirmButton = {
+                                TextButton(
+                                    enabled = !questBusy,
+                                    onClick = {
+                                        showCancelConfirm = false
+                                        questBusy = true
+                                        questError = null
+                                        model.cancelSession(active.sessionId) { ok, err ->
+                                            questBusy = false
+                                            if (!ok) questError = err
+                                        }
+                                    },
+                                ) { Text("Yes, cancel") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showCancelConfirm = false }) { Text("Keep going") }
+                            },
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (active.state == "pending" && active.needsMyAccept) {
                             Button(
@@ -379,11 +464,15 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                         Button(
                             enabled = !questBusy,
                             onClick = {
-                                questBusy = true
-                                questError = null
-                                model.cancelSession(active.sessionId) { ok, err ->
-                                    questBusy = false
-                                    if (!ok) questError = err
+                                if (active.state == "active") {
+                                    showCancelConfirm = true
+                                } else {
+                                    questBusy = true
+                                    questError = null
+                                    model.cancelSession(active.sessionId) { ok, err ->
+                                        questBusy = false
+                                        if (!ok) questError = err
+                                    }
                                 }
                             },
                         ) { Text("Cancel") }

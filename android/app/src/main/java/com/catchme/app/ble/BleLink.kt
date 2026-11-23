@@ -67,6 +67,14 @@ class BleLink(private val context: Context) {
         return adapter != null && adapter!!.isEnabled
     }
 
+    /** True while linked OR within the scheduled TDD off-link scan/adv grace window. */
+    fun isLinkHealthy(graceMs: Long = 22_000L): Boolean {
+        if (_state.value is State.Connected) return true
+        if (!ensureAdapter() || _state.value is State.Failed) return false
+        val t = lastConnectedAtMs
+        return t != 0L && (System.currentTimeMillis() - t) < graceMs
+    }
+
     @SuppressLint("MissingPermission")
     fun connect(ownAlias: Int) {
         // A fresh user-initiated connect supersedes any paced post-TDD
@@ -145,6 +153,7 @@ class BleLink(private val context: Context) {
     private var scanStartedAt = 0L
     private var lastDevice: BluetoothDevice? = null
     private var reconnectTries = 0
+    @Volatile private var lastConnectedAtMs = 0L
     // Samsung eventually refuses scanner re-registration after many stop/start
     // cycles of ONE callback instance (observed live on the S21+/S24 FE as
     // onScanFailed errorCode 2, REGISTRATION_FAILED, hitting both phones
@@ -298,7 +307,7 @@ class BleLink(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun reconnectControllerLevel(): Boolean {
         val dev = lastDevice ?: return false
-        if (reconnectTries >= 5) return false
+        if (reconnectTries >= 8) return false
         reconnectTries++
         _state.value = State.Connecting
         val old = gatt
@@ -358,7 +367,8 @@ class BleLink(private val context: Context) {
             if (!reconnectControllerLevel()) _state.value = State.Idle
         }
         pendingReconnect = r
-        mainHandler.postDelayed(r, RECONNECT_DELAY_MS)
+        val delayMs = if (wantedAlias == 1) RECONNECT_DELAY_D1_MS else RECONNECT_DELAY_D2_MS
+        mainHandler.postDelayed(r, delayMs)
     }
 
     /** Hold all reconnects for the given duration (the raid fight owns the
@@ -393,6 +403,7 @@ class BleLink(private val context: Context) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     reconnectTries = 0
+                    lastConnectedAtMs = System.currentTimeMillis()
                     g.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
@@ -447,6 +458,7 @@ class BleLink(private val context: Context) {
         override fun onDescriptorWrite(g: BluetoothGatt, d: android.bluetooth.BluetoothGattDescriptor, status: Int) {
             if (d.uuid == cccd) {
                 Log.i(TAG, "CCCD written status=$status -> CONNECTED")
+                lastConnectedAtMs = System.currentTimeMillis()
                 _state.value = State.Connected
                 send(Frame.MSG_HELLO, ByteArray(0))
             }
@@ -493,16 +505,16 @@ class BleLink(private val context: Context) {
         gatt?.disconnect()
         gatt?.close()
         gatt = null
+        lastConnectedAtMs = 0L
         _state.value = State.Idle
     }
 
     companion object {
         private const val TAG = "BleLink"
 
-        /** Radio-silent period after a board-initiated disconnect: covers the
-         * board's 2 s evidence scan window plus ~1.2 s of unobstructed peer
-         * advertising; the reconnect then lands inside the remaining 2.2 s
-         * advertising window. */
-        private const val RECONNECT_DELAY_MS = 3200L
+        /** Radio-silent period after a board-initiated disconnect: covers each
+         * board's off-link PREADV + SCAN window so phone reconnects land inside ADV. */
+        private const val RECONNECT_DELAY_D1_MS = 2300L
+        private const val RECONNECT_DELAY_D2_MS = 3300L
     }
 }

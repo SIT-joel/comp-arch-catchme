@@ -106,4 +106,10 @@ void InternalQueue::acknowledge(uint16_t n) {
   if (n > pending_) n = pending_;
   base_ += n;
   pending_ -= n;
+  if (pending_ == 0 && head_ >= (uint32_t)(CM_IQ_ROWS * CM_IQ_PER_ROW)) {
+    base_ = 0;
+    head_ = 0;
+    full_ = false;
+    nvm_erase_row(slot_addr(0));
+  }
 }

@@ -464,19 +464,25 @@ def test_separation_pauses_and_resumes_progress(clients):
     token = session["token"]
     session_id = session["id"]
 
-    # 0..6 s mutual (6 s progress), then a 15 s separation gap. The gap is
-    # never bridged: progress stays exactly at the first span's duration.
+    # 0..6 s mutual (6 s progress), then a 15 s transient gap within the 20 s
+    # tolerance: the two observations at 6 s and 21 s bridge cleanly (23 s).
     push_mutual_observations(clients, session, 1, [0, 2, 4, 6], token)
 
     state = clients["a"].get(f"/api/v1/sessions/{session_id}").json()
     assert state["state"] == "active"
     assert state["progress_ms"] == 6_000
 
-    # Reunite long after: the gap contributes no time; new span resumes credit.
-    push_mutual_observations(clients, session, 10, [21, 23, 25, 27], token)
+    push_mutual_observations(clients, session, 10, [21, 23], token)
     state = clients["a"].get(f"/api/v1/sessions/{session_id}").json()
     assert state["state"] == "active"
-    assert state["progress_ms"] == 6_000 + 6_000
+    assert state["progress_ms"] == 23_000
+
+    # 25 s genuine separation gap (23 s -> 48 s > 20 s max): never bridged,
+    # while new observations at 48..52 s resume earning (+4 s -> 27 s).
+    push_mutual_observations(clients, session, 20, [48, 50, 52], token)
+    state = clients["a"].get(f"/api/v1/sessions/{session_id}").json()
+    assert state["state"] == "active"
+    assert state["progress_ms"] == 23_000 + 4_000
 
 
 def test_one_sided_evidence_never_completes(clients):

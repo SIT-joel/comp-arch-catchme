@@ -28,19 +28,32 @@ void UiApp::tick() {
     last_phase_ = interaction.phase;
     if (interaction.phase == 1 || interaction.phase == 3) {
       screen_ = SCR_INTERACTION;
-      pin_edit_ = true;
+      pin_edit_ = !interaction.partner_confirmed;
       memset(pin_digits_, 0, sizeof(pin_digits_));
       pin_digit_ = 0;
+      interaction_status_[0] = 0;
+    } else if (interaction.phase == 2) {
+      screen_ = SCR_INTERACTION;
+      pin_edit_ = false;
+      pending_command_len_ = 0;
       interaction_status_[0] = 0;
     } else if (interaction.phase >= 4) {
       screen_ = SCR_INTERACTION;
       pin_edit_ = false;
     } else if (interaction.phase == 0) {
       pending_command_len_ = 0;
+      interaction_status_[0] = 0;
       if (screen_ == SCR_INTERACTION) {
         screen_ = SCR_PET;  // leave interaction screen so reward banner & home render
       }
     }
+  }
+  if ((interaction.phase == 1 || interaction.phase == 3) &&
+      interaction.partner_confirmed && pending_command_len_ != 0 &&
+      pending_command_[1] == 1) {
+    pending_command_len_ = 0;
+    pin_edit_ = false;
+    strcpy(interaction_status_, "PIN VERIFIED!");
   }
 
   // v2 quiz: auto-takeover while the phone's quiz is active (the wearable
@@ -74,9 +87,12 @@ void UiApp::tick() {
   if (!g_ble.phoneReady()) {
     last_command_send_ms_ = 0;
   } else if (pending_command_len_ &&
-             (last_command_send_ms_ == 0 || millis() - last_command_send_ms_ >= 1200)) {
+             (last_command_send_ms_ == 0 || millis() - last_command_send_ms_ >= 1500)) {
     if (g_ble.send_message(MSG_INTERACTION_COMMAND, pending_command_, pending_command_len_)) {
       last_command_send_ms_ = millis();
+      if (strcmp(interaction_status_, "SENDING...") == 0) {
+        strcpy(interaction_status_, "VERIFYING...");
+      }
     }
   }
 
@@ -97,7 +113,7 @@ void UiApp::tick() {
       }
       if (pressed & TSButtonLowerLeft) {
         if (pin_digit_ > 0) --pin_digit_;
-        else pin_edit_ = false;  // leave entry only; do not cancel the quest
+        else pin_edit_ = false;  // step out to summary view; never exit quest screen
       }
     } else {
       if (pressed & TSButtonUpperRight) {
@@ -108,9 +124,11 @@ void UiApp::tick() {
         send_interaction_command(2, stage, interaction.own_code_version, nullptr);
       }
       if (pressed & TSButtonUpperLeft) screen_ = SCR_PET;
-      if (pressed & TSButtonLowerLeft) screen_ = SCR_PET;
+      if ((pressed & TSButtonLowerLeft) && !interaction.partner_confirmed) {
+        pin_edit_ = true;  // never exit quest screen on accidental LL tap
+      }
     }
-    return;  // PIN entry owns all four buttons; global navigation is paused.
+    return;  // PIN screen owns navigation; accidental exit prevented.
   }
 
   if (screen_ == SCR_INTERACTION && interaction.phase >= 4) {
@@ -272,12 +290,13 @@ void UiApp::tick() {
     // then UL again from PET).
   }
 
+  const uint8_t n_screens = interaction_screen_active() ? (SCREEN_COUNT + 1) : SCREEN_COUNT;
   if (pressed & TSButtonUpperRight) {
-    screen_ = static_cast<Screen>((screen_ + 1) % SCREEN_COUNT);
+    screen_ = static_cast<Screen>((screen_ + 1) % n_screens);
   }
   if (pressed & TSButtonUpperLeft) {
     game_view_ = false;
-    screen_ = static_cast<Screen>((screen_ + SCREEN_COUNT - 1) % SCREEN_COUNT);
+    screen_ = static_cast<Screen>((screen_ + n_screens - 1) % n_screens);
   }
 }
 
@@ -308,11 +327,12 @@ void UiApp::send_interaction_command(uint8_t kind, uint8_t stage, uint16_t code_
   if (value_len) memcpy(pending_command_ + 30, value, value_len);
   pending_command_len_ = 30 + value_len;
   memcpy(&pending_nonce_, pending_command_ + 5, 8);
-  strcpy(interaction_status_, "CHECKING");
+  strcpy(interaction_status_, "SENDING...");
   last_command_send_ms_ = 0;
   if (g_ble.phoneReady() &&
       g_ble.send_message(MSG_INTERACTION_COMMAND, pending_command_, pending_command_len_)) {
     last_command_send_ms_ = millis();
+    strcpy(interaction_status_, "VERIFYING...");
   }
 }
 
@@ -326,7 +346,18 @@ void UiApp::apply_interaction_ack(const uint8_t* payload, uint16_t len) {
     return;
   }
   pending_command_len_ = 0;
-  strcpy(interaction_status_, code ? "SENT" : "RETRY NEEDED");
+  if (code == 1) {
+    pin_edit_ = false;
+    strcpy(interaction_status_, "PIN VERIFIED!");
+  } else if (code == 3) {
+    pin_edit_ = true;
+    pin_digit_ = 0;
+    strcpy(interaction_status_, "CODE EXPIRED");
+  } else {
+    pin_edit_ = true;
+    pin_digit_ = 0;
+    strcpy(interaction_status_, "WRONG PIN");
+  }
 }
 
 void UiApp::render() {
@@ -490,7 +521,7 @@ void UiApp::render_disc() {
   // Phone link dot: matching happens in the app.
   display_.setFont(liberationSans_8ptFontInfo);
   display_.setCursor(76, 2);
-  if (g_ble.phoneConnected()) {
+  if (g_ble.phoneLinkHealthy()) {
     display_.fontColor(TS_8b_Green, TS_8b_Black);
     display_.print("app");
   } else {
@@ -595,6 +626,11 @@ void UiApp::render_interaction() {
     display_.fontColor(TS_8b_Gray, TS_8b_Black);
     display_.print("Partner: ");
     display_.print(interaction.own_confirmed ? "entered yours" : "waiting");
+    const uint8_t status_color =
+        strcmp(interaction_status_, "PIN VERIFIED!") == 0 ? TS_8b_Green
+        : (strcmp(interaction_status_, "WRONG PIN") == 0 ||
+           strcmp(interaction_status_, "CODE EXPIRED") == 0) ? TS_8b_Red
+        : interaction_status_[0] ? TS_8b_Yellow : TS_8b_Gray;
     if (pin_edit_) {
       char entered[] = {' ', char('0' + pin_digits_[0]), ' ', char('0' + pin_digits_[1]),
                         ' ', char('0' + pin_digits_[2]), ' ', char('0' + pin_digits_[3]), 0};
@@ -609,16 +645,18 @@ void UiApp::render_interaction() {
       display_.setCursor(0, 50);
       display_.print("UR + UL - LR next");
       display_.setCursor(0, 58);
-      // Surface the server ACK while entry mode stays open; otherwise an
-      // incorrect/expired PIN looks like the button did nothing.
+      display_.fontColor(status_color, TS_8b_Black);
       display_.print(interaction_status_[0] ? interaction_status_ : "LL back");
     } else {
       display_.setCursor(0, 33);
-      display_.print(interaction.partner_confirmed ? "You entered partner's code" : "Enter partner's code");
+      display_.fontColor(interaction.partner_confirmed ? TS_8b_Green : TS_8b_White, TS_8b_Black);
+      display_.print(interaction.partner_confirmed ? "Partner code verified" : "Enter partner's code");
       display_.setCursor(0, 45);
+      display_.fontColor(TS_8b_Gray, TS_8b_Black);
       display_.print("UR edit  LR refresh");
       display_.setCursor(0, 56);
-      display_.print(interaction_status_[0] ? interaction_status_ : "LL back");
+      display_.fontColor(status_color, TS_8b_Black);
+      display_.print(interaction_status_[0] ? interaction_status_ : "UL: screens");
     }
     return;
   }
@@ -627,21 +665,21 @@ void UiApp::render_interaction() {
     const SessionStateMsg& s = g_ble.session();
     const uint32_t rem_s = s.target_ms > s.progress_ms ? (s.target_ms - s.progress_ms + 999UL) / 1000UL : 0;
     display_.print("TOGETHER TIME");
-    display_.setCursor(0, 16);
+    display_.setCursor(0, 14);
     if (quest_bt_out_of_range()) {
       display_.fontColor(TS_8b_Red, TS_8b_Black);
       display_.print("! BT OUT OF RANGE !");
-      display_.setCursor(0, 29);
+      display_.setCursor(0, 25);
       display_.fontColor(TS_8b_Yellow, TS_8b_Black);
       display_.print("Move closer (paused)");
     } else {
       display_.fontColor(TS_8b_Green, TS_8b_Black);
       display_.print("Codes confirmed");
-      display_.setCursor(0, 29);
+      display_.setCursor(0, 25);
       display_.fontColor(TS_8b_White, TS_8b_Black);
       display_.print("BT proximity ok");
     }
-    display_.setCursor(0, 45);
+    display_.setCursor(0, 38);
     display_.fontColor(TS_8b_White, TS_8b_Black);
     display_.print(rem_s);
     display_.print("s left (");
@@ -649,6 +687,9 @@ void UiApp::render_interaction() {
     display_.print("/");
     display_.print(s.target_ms / 1000);
     display_.print("s)");
+    display_.setCursor(0, 56);
+    display_.fontColor(TS_8b_Gray, TS_8b_Black);
+    display_.print("UL: screens");
     return;
   }
   if (interaction.phase == 4) {
@@ -1239,7 +1280,10 @@ void UiApp::render_pet() {
     }
     return;
   }
-  if (g_petcore.lonely()) {
+  if (interaction_screen_active() && !g_petcore.feed_refusal()[0]) {
+    display_.fontColor(TS_8b_Yellow, TS_8b_Black);
+    display_.print("UL: BACK TO QUEST");
+  } else if (g_petcore.lonely()) {
     display_.fontColor(TS_8b_Red, TS_8b_Black);
     display_.print("lonely... bring a friend");
   } else {
@@ -1348,15 +1392,15 @@ void UiApp::render_gps() {
     display_.print("Age:");
     display_.print(age_s);
     display_.print("s ");
-    display_.fontColor(g_ble.phoneConnected() ? TS_8b_Green : TS_8b_Red, TS_8b_Black);
-    display_.print(g_ble.phoneConnected() ? "BT ok" : "BT...");
+    display_.fontColor(g_ble.phoneLinkHealthy() ? TS_8b_Green : TS_8b_Red, TS_8b_Black);
+    display_.print(g_ble.phoneLinkHealthy() ? "BT ok" : "BT...");
   } else {
     display_.setCursor(0, 14);
     display_.fontColor(TS_8b_Yellow, TS_8b_Black);
     display_.print("GPS: waiting BT");
     display_.setCursor(0, 26);
     display_.fontColor(TS_8b_Gray, TS_8b_Black);
-    display_.print(g_ble.phoneConnected() ? "no fix on phone" : "link phone app");
+    display_.print(g_ble.phoneLinkHealthy() ? "no fix on phone" : "link phone app");
   }
 
   display_.setCursor(0, 47);

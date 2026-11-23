@@ -37,6 +37,7 @@ services:
       CM_GEOFENCE_LAT: "${CM_GEOFENCE_LAT:-1.4147143170700585}"
       CM_GEOFENCE_LON: "${CM_GEOFENCE_LON:-103.91203638248588}"
       CM_GEOFENCE_RADIUS_M: "${CM_GEOFENCE_RADIUS_M:-200}"
+      CM_PEER_GAP_MAX_MS: "${CM_PEER_GAP_MAX_MS:-20000}"
       CM_RAID_FIX_MAX_AGE_MS: "${CM_RAID_FIX_MAX_AGE_MS:-900000}"
     # Single worker: in-memory SSE fan-out assumes one process.
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1

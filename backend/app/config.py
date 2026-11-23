@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     pet_care_xp: int = 10
 
     # Evidence rules from the specification
-    peer_gap_max_ms: int = 10_000
+    peer_gap_max_ms: int = 20_000
     gps_stale_max_ms: int = 10_000
     heart_rate_carry_max_ms: int = 3_000
     clock_uncertainty_max_ms: int = 2_000

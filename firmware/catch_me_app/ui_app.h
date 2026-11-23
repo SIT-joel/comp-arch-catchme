@@ -184,13 +184,18 @@ class UiApp {
   uint32_t quiz_last_send_ms_ = 0;
   bool explore_dismissed_ = false;
   uint32_t quest_active_since_ms_ = 0;
+  bool interaction_screen_active() const {
+    const uint8_t ph = g_ble.interaction().phase;
+    return ph >= 1 && ph <= 3;
+  }
   bool quest_bt_out_of_range() const {
     const SessionStateMsg& s = g_ble.session();
     if (!s.active || quest_active_since_ms_ == 0) return false;
-    if (millis() - quest_active_since_ms_ < 12000UL) return false;
-    if (g_ble.phoneLinkLost(12000UL)) return true;
+    if (s.quest == 5) return false;
+    if (millis() - quest_active_since_ms_ < 25000UL) return false;
+    if (g_ble.phoneLinkLost(25000UL)) return true;
     const PeerObservation& p = g_ble.last_peer();
-    return (p.device == 0 || (millis() - p.at_ms) > 15000UL);
+    return (p.device == 0 || (millis() - p.at_ms) > 28000UL);
   }
   // Reward banner state (see flash_reward).
   char reward_title_[16] = {0};

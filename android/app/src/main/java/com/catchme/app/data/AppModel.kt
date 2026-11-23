@@ -69,6 +69,10 @@ class AppModel(private val context: Context, baseUrl: String) {
         val achievements: List<AccView> = emptyList(),
         val newAchievement: String? = null,  // latest unlock name (banner)
         val newAchievementAt: Long = 0,  // ms epoch of the banner appearance
+        val bleLinkHealthy: Boolean = false,
+        val pinVerifyStatus: String? = null,
+        val pinVerifyIsError: Boolean = false,
+        val pinVerifyBusy: Boolean = false,
     )
 
     data class SessionView(
@@ -80,6 +84,12 @@ class AppModel(private val context: Context, baseUrl: String) {
         val targetMs: Long?,
         val needsMyAccept: Boolean,
         val interactionSummary: String? = null,
+        val interactionPhase: String? = null,
+        val interactionStage: String? = null,
+        val ownPin: String? = null,
+        val partnerCodeVersion: Int = 0,
+        val myPinConfirmed: Boolean = false,
+        val partnerPinConfirmed: Boolean = false,
     )
 
     /** One achievement row for the achievements card (unlocked=false rows
@@ -308,6 +318,7 @@ class AppModel(private val context: Context, baseUrl: String) {
             // delivery resumes within one keep-alive cycle if the OS scales
             // the interval back.
             keepGpsAlive()
+            updateProximityAlert()
             val state = ble.state.value
             if (state is BleLink.State.Idle || state is BleLink.State.Failed) {
                 // Back off when the stack keeps refusing scans (observed on the
@@ -600,6 +611,10 @@ class AppModel(private val context: Context, baseUrl: String) {
     private fun updateProximityAlert() {
         val active = _ui.value.activeSession
         val now = System.currentTimeMillis()
+        val linkHealthy = ble.isLinkHealthy(22_000L)
+        if (_ui.value.bleLinkHealthy != linkHealthy) {
+            _ui.update { it.copy(bleLinkHealthy = linkHealthy) }
+        }
         if (active == null || active.state != "active") {
             if (active == null) {
                 activeQuestIdTracked = null
@@ -618,10 +633,14 @@ class AppModel(private val context: Context, baseUrl: String) {
                 bleDisconnectedAtMs = now
             }
         }
+        val btOff = !ble.ensureAdapter() || ble.state.value is BleLink.State.Failed
+        val linkGraceMs = if (btOff) 4_000L else 22_000L
         val linkAlert = ble.state.value !is BleLink.State.Connected &&
-            bleDisconnectedAtMs != 0L && (now - bleDisconnectedAtMs) >= 12_000L
-        val peerMissing = (now - activeQuestStartedAtMs) >= 14_000L &&
-            (lastPeerBleSeenMs == 0L || (now - lastPeerBleSeenMs) >= 14_000L)
+            bleDisconnectedAtMs != 0L && (now - bleDisconnectedAtMs) >= linkGraceMs
+        val supportsPeerGap = active.questId == "explore" || active.questId == "together"
+        val peerMissing = supportsPeerGap &&
+            (now - activeQuestStartedAtMs) >= 25_000L &&
+            (lastPeerBleSeenMs == 0L || (now - lastPeerBleSeenMs) >= 28_000L)
         val timerActive = active.questId == "explore" ||
             (active.questId == "together" && active.interactionSummary?.startsWith("Codes confirmed") == true)
         val alert: String? = when {
@@ -642,6 +661,7 @@ class AppModel(private val context: Context, baseUrl: String) {
         if (ble.state.value !is BleLink.State.Connected) return
         relayMutex.withLock {
             if (ble.state.value !is BleLink.State.Connected) return
+            flushPendingInteractionAcks()
             val nowMs = System.currentTimeMillis()
             if (nowMs - lastPetRefreshMs >= 10_000) {
                 lastPetRefreshMs = nowMs
@@ -780,6 +800,91 @@ class AppModel(private val context: Context, baseUrl: String) {
         ble.send(Frame.MSG_INTERACTION_STATE, out)
     }
 
+    private val interactionNonceLock = Any()
+    private val inFlightInteractionNonces = HashSet<Long>()
+    private val completedInteractionAcks = LinkedHashMap<Long, Int>()
+    private val pendingInteractionAcks = LinkedHashMap<Long, Int>()
+
+    private fun buildInteractionAck(nonce: Long, ackCode: Int): ByteArray {
+        val ack = ByteArray(10)
+        ack[0] = 1
+        ByteBuffer.wrap(ack, 1, 8).order(ByteOrder.LITTLE_ENDIAN).putLong(nonce)
+        ack[9] = ackCode.toByte()
+        return ack
+    }
+
+    private fun sendOrQueueInteractionAck(nonce: Long, ackCode: Int) {
+        val sent = ble.send(Frame.MSG_INTERACTION_ACK, buildInteractionAck(nonce, ackCode))
+        synchronized(interactionNonceLock) {
+            if (!sent) {
+                pendingInteractionAcks[nonce] = ackCode
+                while (pendingInteractionAcks.size > 32) {
+                    val oldest = pendingInteractionAcks.keys.first()
+                    pendingInteractionAcks.remove(oldest)
+                }
+            } else {
+                pendingInteractionAcks.remove(nonce)
+            }
+        }
+    }
+
+    private fun flushPendingInteractionAcks() {
+        val snapshot = synchronized(interactionNonceLock) { pendingInteractionAcks.entries.map { it.key to it.value } }
+        for ((nonce, ackCode) in snapshot) {
+            if (ble.send(Frame.MSG_INTERACTION_ACK, buildInteractionAck(nonce, ackCode))) {
+                synchronized(interactionNonceLock) { pendingInteractionAcks.remove(nonce) }
+            } else {
+                break
+            }
+        }
+    }
+
+    private suspend fun submitPinWithRetry(
+        sessionId: UUID,
+        stage: String,
+        pin: String,
+        initialVersion: Int,
+        nonce: Long,
+        alias: Int,
+    ) {
+        var ver = initialVersion
+        if (ver <= 0) {
+            ver = _ui.value.activeSession?.partnerCodeVersion?.takeIf { it > 0 }
+                ?: runCatching { api.interaction(sessionId).optInt("partner_code_version", 1) }.getOrDefault(1)
+        }
+        var versionRefreshed = false
+        var lastErr: Throwable? = null
+        for (attempt in 1..3) {
+            val suffix = if (ver != initialVersion) ":v$ver" else ""
+            val cmdId = UUID.nameUUIDFromBytes("$sessionId:$alias:$nonce$suffix".toByteArray(Charsets.US_ASCII))
+            try {
+                api.submitInteractionPin(sessionId, stage, pin, ver, cmdId)
+                return
+            } catch (e: Api.ApiError) {
+                if (e.status == 409 && !versionRefreshed) {
+                    val msg = (e.message ?: "").lowercase()
+                    if ("expired" in msg || "changed" in msg || e.code == "pin_expired") {
+                        versionRefreshed = true
+                        val latestVer = runCatching { api.interaction(sessionId) }.getOrNull()?.let { obj ->
+                            val curStage = obj.optString("stage", "")
+                            if (curStage == stage) obj.optInt("partner_code_version", 0) else 0
+                        } ?: 0
+                        if (latestVer > ver) {
+                            ver = latestVer
+                            continue
+                        }
+                    }
+                }
+                if (e.status in 400..499) throw e
+                lastErr = e
+            } catch (e: Exception) {
+                lastErr = e
+            }
+            if (attempt < 3) delay(if (attempt == 1) 400L else 900L)
+        }
+        throw (lastErr ?: IllegalStateException("Network error verifying PIN"))
+    }
+
     /** Device commands are retried with the same nonce; API idempotency maps
      * that stable command identity to a server UUID. PIN payloads are never
      * written to logs or persisted by the phone. */
@@ -795,33 +900,182 @@ class AppModel(private val context: Context, baseUrl: String) {
         val valueLen = payload[29].toInt() and 0xFF
         if (valueLen > 4 || payload.size < 30 + valueLen) return
         val value = String(payload, 30, valueLen, Charsets.US_ASCII)
-        val commandId = UUID.nameUUIDFromBytes(
-            "${sessionId}:${_ui.value.deviceAlias ?: 0}:$nonce".toByteArray(Charsets.US_ASCII))
+        val cachedAck = synchronized(interactionNonceLock) {
+            val done = completedInteractionAcks[nonce]
+            if (done != null) {
+                done
+            } else if (!inFlightInteractionNonces.add(nonce)) {
+                return
+            } else {
+                null
+            }
+        }
+        if (cachedAck != null) {
+            scope.launch { sendOrQueueInteractionAck(nonce, cachedAck) }
+            return
+        }
+        val alias = _ui.value.deviceAlias ?: 0
+        if (kind == 1) {
+            _ui.update {
+                it.copy(
+                    pinVerifyBusy = true,
+                    pinVerifyIsError = false,
+                    pinVerifyStatus = "PIN received from TinyScreen+ — verifying with server…",
+                )
+            }
+        }
         scope.launch {
             var ackCode = 0
-            runCatching {
-                when (kind) {
-                    1 -> if (stage.isNotEmpty() && valueLen == 4) api.submitInteractionPin(
-                        sessionId, stage, value, codeVersion, commandId)
-                        else error("invalid PIN command")
-                    2 -> if (stage.isNotEmpty()) api.refreshInteractionPin(sessionId, stage, commandId)
-                        else error("invalid refresh command")
-                    // v2: heart-quest kinds (3 truth / 4 dare / 5 skip) are gone.
-                    else -> error("unknown interaction command")
+            try {
+                try {
+                    when (kind) {
+                        1 -> {
+                            if (stage.isEmpty() || valueLen != 4) error("invalid PIN command")
+                            submitPinWithRetry(sessionId, stage, value, codeVersion, nonce, alias)
+                        }
+                        2 -> {
+                            if (stage.isEmpty()) error("invalid refresh command")
+                            val cmdId = UUID.nameUUIDFromBytes("$sessionId:$alias:$nonce".toByteArray(Charsets.US_ASCII))
+                            var lastErr: Throwable? = null
+                            var refreshed = false
+                            for (attempt in 1..2) {
+                                try {
+                                    api.refreshInteractionPin(sessionId, stage, cmdId)
+                                    refreshed = true
+                                    break
+                                } catch (e: Api.ApiError) {
+                                    if (e.status in 400..499) throw e
+                                    lastErr = e
+                                } catch (e: Exception) {
+                                    lastErr = e
+                                }
+                                if (attempt < 2) delay(400L)
+                            }
+                            if (!refreshed) throw (lastErr ?: IllegalStateException("Refresh failed"))
+                        }
+                        // v2: heart-quest kinds (3 truth / 4 dare / 5 skip) are gone.
+                        else -> error("unknown interaction command")
+                    }
+                    ackCode = 1
+                    if (kind == 1) {
+                        _ui.update {
+                            it.copy(
+                                pinVerifyBusy = false,
+                                pinVerifyIsError = false,
+                                pinVerifyStatus = "PIN verified by server ✓",
+                            )
+                        }
+                    }
+                    refreshDeviceStateSync()
+                } catch (err: Throwable) {
+                    val apiErr = err as? Api.ApiError
+                    val isClientReject = apiErr != null && apiErr.status in 400..499
+                    ackCode = when {
+                        !isClientReject -> 2  // transient network/server error -> retry automatically
+                        apiErr?.status == 409 || apiErr?.status == 429 -> 3
+                        else -> 0
+                    }
+                    if (kind == 1) {
+                        val uiMsg = when (ackCode) {
+                            0 -> "Incorrect PIN — check your partner's code and try again"
+                            3 -> apiErr?.message ?: "PIN expired or attempt limit reached — ask partner to refresh"
+                            else -> "Network error verifying PIN — auto-retrying…"
+                        }
+                        _ui.update {
+                            it.copy(
+                                pinVerifyBusy = false,
+                                pinVerifyIsError = true,
+                                pinVerifyStatus = uiMsg,
+                            )
+                        }
+                    }
+                    android.util.Log.w("AppModel", "interaction cmd kind=$kind failed ack=$ackCode: ${err.message}")
                 }
-            }.onSuccess {
-                ackCode = 1
-                refreshDeviceStateSync()
-            }.onFailure { err ->
-                val isClientReject = err is Api.ApiError && err.status in 400..499
-                ackCode = if (isClientReject) 0 else 2  // 2 = transient network error -> board auto-retries
-                android.util.Log.w("AppModel", "interaction cmd kind=$kind failed ack=$ackCode: ${err.message}")
+                synchronized(interactionNonceLock) {
+                    if (ackCode != 2) {
+                        completedInteractionAcks[nonce] = ackCode
+                        while (completedInteractionAcks.size > 32) {
+                            val oldest = completedInteractionAcks.keys.first()
+                            completedInteractionAcks.remove(oldest)
+                        }
+                    }
+                }
+                sendOrQueueInteractionAck(nonce, ackCode)
+            } finally {
+                synchronized(interactionNonceLock) { inFlightInteractionNonces.remove(nonce) }
             }
-            val ack = ByteArray(10)
-            ack[0] = 1
-            ByteBuffer.wrap(ack, 1, 8).order(ByteOrder.LITTLE_ENDIAN).putLong(nonce)
-            ack[9] = ackCode.toByte()
-            ble.send(Frame.MSG_INTERACTION_ACK, ack)
+        }
+    }
+
+    fun submitPinFromApp(sessionId: UUID, stage: String, pin: String, onDone: (Boolean, String?) -> Unit) {
+        if (pin.length != 4 || !pin.all { it.isDigit() }) {
+            val msg = "Enter all 4 digits"
+            _ui.update { it.copy(pinVerifyIsError = true, pinVerifyStatus = msg) }
+            onDone(false, msg)
+            return
+        }
+        val alias = _ui.value.deviceAlias ?: 0
+        val nonce = System.currentTimeMillis()
+        _ui.update {
+            it.copy(
+                pinVerifyBusy = true,
+                pinVerifyIsError = false,
+                pinVerifyStatus = "Verifying PIN with server…",
+            )
+        }
+        scope.launch {
+            runCatching {
+                val curVer = _ui.value.activeSession?.partnerCodeVersion ?: 0
+                submitPinWithRetry(sessionId, stage, pin, curVer, nonce, alias)
+            }.onSuccess {
+                _ui.update {
+                    it.copy(
+                        pinVerifyBusy = false,
+                        pinVerifyIsError = false,
+                        pinVerifyStatus = "PIN verified by server ✓",
+                    )
+                }
+                refreshDeviceStateSync()
+                onDone(true, null)
+            }.onFailure { err ->
+                val apiErr = err as? Api.ApiError
+                val msg = when (apiErr?.status) {
+                    422 -> "Incorrect PIN — check your partner's code and try again"
+                    409, 429 -> apiErr.message
+                    else -> err.message ?: "Failed to verify PIN"
+                }
+                _ui.update {
+                    it.copy(
+                        pinVerifyBusy = false,
+                        pinVerifyIsError = true,
+                        pinVerifyStatus = msg,
+                    )
+                }
+                onDone(false, msg)
+            }
+        }
+    }
+
+    fun refreshPinFromApp(sessionId: UUID, stage: String, onDone: (Boolean, String?) -> Unit) {
+        _ui.update { it.copy(pinVerifyBusy = true, pinVerifyIsError = false, pinVerifyStatus = "Refreshing your PIN…") }
+        scope.launch {
+            runCatching {
+                api.refreshInteractionPin(sessionId, stage, UUID.randomUUID())
+            }.onSuccess {
+                _ui.update {
+                    it.copy(
+                        pinVerifyBusy = false,
+                        pinVerifyIsError = false,
+                        pinVerifyStatus = "Generated new PIN — share the new code with your partner",
+                    )
+                }
+                refreshDeviceStateSync()
+                onDone(true, null)
+            }.onFailure { err ->
+                val msg = err.message ?: "Failed to refresh PIN"
+                _ui.update { it.copy(pinVerifyBusy = false, pinVerifyIsError = true, pinVerifyStatus = msg) }
+                onDone(false, msg)
+            }
         }
     }
 
@@ -911,15 +1165,17 @@ class AppModel(private val context: Context, baseUrl: String) {
             }
         }
         val interaction = session.optJSONObject("interaction")
+        val phase = if (questId == "together" && state == "active") interaction?.optString("phase", "") else null
+        val stage = if (questId == "together" && state == "active") interaction?.optString("stage", "") else null
+        val ownCode = if (questId == "together" && state == "active") interaction?.optString("own_code", "") else null
+        val partnerVer = if (questId == "together" && state == "active") interaction?.optInt("partner_code_version", 0) ?: 0 else 0
+        val myDone = interaction?.optBoolean("partner_code_confirmed_by_me", false) ?: false
+        val partnerDone = interaction?.optBoolean("own_code_confirmed_by_partner", false) ?: false
         val summary = if (questId == "together" && state == "active" && interaction != null) {
-            val phase = interaction.optString("phase", "")
-            val ownCode = interaction.optString("own_code", "")
             when (phase) {
                 "start_pin", "end_pin" -> {
-                    val myDone = interaction.optBoolean("partner_code_confirmed_by_me", false)
-                    val partnerDone = interaction.optBoolean("own_code_confirmed_by_partner", false)
                     val stageLabel = if (phase == "start_pin") "Start PIN" else "End PIN"
-                    "$stageLabel · Your PIN: ${ownCode.ifBlank { "----" }} · " +
+                    "$stageLabel · Your PIN: ${ownCode.orEmpty().ifBlank { "----" }} · " +
                         "You ${if (myDone) "✓" else "waiting"} / Partner ${if (partnerDone) "✓" else "waiting"}"
                 }
                 "timing" -> "Codes confirmed — stay within Bluetooth range of partner's TinyScreen+"
@@ -935,6 +1191,12 @@ class AppModel(private val context: Context, baseUrl: String) {
             targetMs = if (session.isNull("target_ms")) null else session.optLong("target_ms", 0L),
             needsMyAccept = needsAccept,
             interactionSummary = summary,
+            interactionPhase = phase?.takeIf { it.isNotBlank() },
+            interactionStage = stage?.takeIf { it.isNotBlank() },
+            ownPin = ownCode?.takeIf { it.isNotBlank() },
+            partnerCodeVersion = partnerVer,
+            myPinConfirmed = myDone,
+            partnerPinConfirmed = partnerDone,
         )
     }
 
@@ -956,11 +1218,17 @@ class AppModel(private val context: Context, baseUrl: String) {
                 }
                 val active = found != null && found.optString("state") == "active"
                 val sid = found?.let { runCatching { UUID.fromString(it.getString("id")) }.getOrNull() }
+                val nextView = parseSessionView(found)
                 _ui.update {
+                    val resetPinUi = it.activeSession?.sessionId != nextView?.sessionId ||
+                        it.activeSession?.interactionPhase != nextView?.interactionPhase
                     it.copy(
                         sessionToken = if (active) found?.optString("token")?.takeIf { t -> t.isNotBlank() } else null,
                         sessionId = sid,
-                        activeSession = parseSessionView(found),
+                        activeSession = nextView,
+                        pinVerifyStatus = if (resetPinUi) null else it.pinVerifyStatus,
+                        pinVerifyIsError = if (resetPinUi) false else it.pinVerifyIsError,
+                        pinVerifyBusy = if (resetPinUi) false else it.pinVerifyBusy,
                     )
                 }
                 if (active && found?.optString("quest_id") == "quiz" && sid != null) {
@@ -987,13 +1255,19 @@ class AppModel(private val context: Context, baseUrl: String) {
                 else UUID.fromString(ds.getString("partner_device_id"))
             val sidStr = session?.optString("session_id")
             val sidUuid = sidStr?.let { s -> runCatching { UUID.fromString(s) }.getOrNull() }
+            val nextView = parseSessionView(session)
             _ui.update {
+                val resetPinUi = it.activeSession?.sessionId != nextView?.sessionId ||
+                    it.activeSession?.interactionPhase != nextView?.interactionPhase
                 it.copy(
                     partnered = isPartnered,
                     partnerDeviceId = partnerDevice,
                     sessionToken = token,
                     sessionId = sidUuid,
-                    activeSession = parseSessionView(session),
+                    activeSession = nextView,
+                    pinVerifyStatus = if (resetPinUi) null else it.pinVerifyStatus,
+                    pinVerifyIsError = if (resetPinUi) false else it.pinVerifyIsError,
+                    pinVerifyBusy = if (resetPinUi) false else it.pinVerifyBusy,
                 )
             }
             if (active && session?.optString("quest_id") == "quiz" && sidStr != null) {
@@ -1024,7 +1298,15 @@ class AppModel(private val context: Context, baseUrl: String) {
         scope.launch {
             try {
                 lastQuizSessionId = null
-                _ui.update { it.copy(quiz = null, proximityAlert = null) }
+                _ui.update {
+                    it.copy(
+                        quiz = null,
+                        proximityAlert = null,
+                        pinVerifyStatus = null,
+                        pinVerifyIsError = false,
+                        pinVerifyBusy = false,
+                    )
+                }
                 api.createSession(questId, demo, landmarkId)
                 refreshDeviceStateSync()
                 onResult(true, null)
@@ -1056,7 +1338,15 @@ class AppModel(private val context: Context, baseUrl: String) {
             try {
                 api.cancelSession(id)
                 lastQuizSessionId = null
-                _ui.update { it.copy(quiz = null, proximityAlert = null) }
+                _ui.update {
+                    it.copy(
+                        quiz = null,
+                        proximityAlert = null,
+                        pinVerifyStatus = null,
+                        pinVerifyIsError = false,
+                        pinVerifyBusy = false,
+                    )
+                }
                 refreshDeviceStateSync()
                 onResult(true, null)
             } catch (e: Exception) {

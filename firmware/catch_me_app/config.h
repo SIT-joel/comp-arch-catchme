@@ -42,7 +42,7 @@
 #define CM_DISC_RESULTS_MAX 3
 
 // Evidence rule ceiling: an observation older than this is not "recent".
-#define CM_PEER_RECENT_MS 10000
+#define CM_PEER_RECENT_MS 20000
 
 // --- GPS (ASD2501) ---
 #define GPS_RXPin A1
@@ -101,13 +101,13 @@
 // drift (~0.9 s/cycle), so the scan/advertise windows sweep past each
 // other within a couple of minutes regardless of reconnect timing.
 #if DEVICE_ID == 2
-#define CM_TDD_LINKED_MS 3600
-#define CM_TDD_PREADV_MS 800
+#define CM_TDD_LINKED_MS 4400
+#define CM_TDD_PREADV_MS 1000
 #define CM_TDD_SCAN_MS 2200
 #define CM_TDD_ADV_MS 1900
 #else
-#define CM_TDD_LINKED_MS 3500
-#define CM_TDD_PREADV_MS 0
+#define CM_TDD_LINKED_MS 3800
+#define CM_TDD_PREADV_MS 500
 #define CM_TDD_SCAN_MS 1700
 #define CM_TDD_ADV_MS 1900
 #endif

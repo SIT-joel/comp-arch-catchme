@@ -117,9 +117,12 @@ class BleApp {
     return phone_connected_ && (cccd_ready_ || (millis() - connected_at_ms_ >= 1200UL));
   }
   // True when the phone link has been absent longer than a scheduled TDD cycle.
-  bool phoneLinkLost(uint32_t grace_ms = 12000UL) const {
+  bool phoneLinkLost(uint32_t grace_ms = 22000UL) const {
     return !phone_connected_ && last_phone_connected_ms_ != 0 &&
            (millis() - last_phone_connected_ms_) >= grace_ms;
+  }
+  bool phoneLinkHealthy(uint32_t grace_ms = 22000UL) const {
+    return phone_connected_ || (last_phone_connected_ms_ != 0 && (millis() - last_phone_connected_ms_) < grace_ms);
   }
   uint32_t adverts_received() const { return adverts_rx_; }
 
