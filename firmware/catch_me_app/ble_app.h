@@ -87,6 +87,7 @@ struct SessionStateMsg {
   char completion[24];    // completion event id ("" when none)
   bool timer_running;     // server + phone live countdown gate
   uint32_t rx_at_ms;      // local millis() when this snapshot arrived
+  uint32_t max_local_advance_ms;  // remaining budget within server display grace
 };
 
 struct InteractionStateMsg {
@@ -157,6 +158,7 @@ class BleApp {
   const InteractionStateMsg& interaction() const { return interaction_; }
   const PhoneGpsMsg& phone_gps() const { return phone_gps_; }
   const char* last_completion() const { return completion_; }
+  uint8_t last_completion_quest() const { return completion_quest_; }
 
   // --- Nearby discovery (unpaired mode; never quest evidence) ---
   // General discovery runs only while enabled AND unpaired; pairing stops
@@ -320,6 +322,7 @@ class BleApp {
   InteractionStateMsg interaction_{};
   PhoneGpsMsg phone_gps_{};
   char completion_[24] = {0};
+  uint8_t completion_quest_ = 0;
 
   // Discovery state. discovery_synced_ shows the
   // last mode change was confirmed end-to-end; false + disconnected means

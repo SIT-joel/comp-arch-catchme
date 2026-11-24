@@ -470,7 +470,12 @@ void loop() {
     last_buzzed_completion[sizeof(last_buzzed_completion) - 1] = 0;
     buzz_completion();
     g_petcore.celebrate();  // v2: the pet celebrates a quest award
-    g_ui.flash_reward("QUEST COMPLETE");  // make the +100 XP impact visible
+    const uint8_t q = g_ble.last_completion_quest();
+    const char* done_title = q == 1 ? "TOGETHER DONE!"
+                           : q == 2 ? "EXPLORE DONE!"
+                           : q == 5 ? "QUIZ DONE!"
+                                    : "QUEST COMPLETE";
+    g_ui.flash_reward(done_title);  // make the +100 XP impact visible
   }
 
   if (now - last_record_ms >= CM_RECORD_PERIOD_MS) {
@@ -508,9 +513,12 @@ void loop() {
     }
   }
 
-  // v2: ~10 Hz while the pet mini-game is live; 1 Hz otherwise.
-  const uint32_t fast_render_ms = 100UL;
-  if (now - last_ui_ms >= (g_ui.wants_fast_render() ? fast_render_ms : CM_UI_REFRESH_MS)) {
+  // v2: ~10 Hz while the pet mini-game is live; 4 Hz while a timed quest
+  // is counting down so both OLEDs flip seconds together; 1 Hz otherwise.
+  const uint32_t ui_period_ms = g_ui.wants_fast_render()    ? 100UL
+                              : g_ui.wants_timer_refresh()  ? 250UL
+                                                            : CM_UI_REFRESH_MS;
+  if (now - last_ui_ms >= ui_period_ms) {
     last_ui_ms = now;
     g_ui.render();
   }

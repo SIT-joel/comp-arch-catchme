@@ -75,6 +75,20 @@ class AppModel(private val context: Context, baseUrl: String) {
         val pinVerifyStatus: String? = null,
         val pinVerifyIsError: Boolean = false,
         val pinVerifyBusy: Boolean = false,
+        val completedQuest: CompletedQuestView? = null,
+    )
+
+    data class CompletedQuestView(
+        val completionEventId: String,
+        val sessionId: UUID,
+        val questId: String,
+        val demo: Boolean,
+        val pointsAwarded: Int,
+        val xpAwarded: Int,
+        val partnerName: String?,
+        val level: Int,
+        val lifetimeXp: Int,
+        val quiz: QuizView? = null,
     )
 
     data class SessionView(
@@ -161,9 +175,18 @@ class AppModel(private val context: Context, baseUrl: String) {
             return session.progressMs
         }
         val serverNowMs = if (serverClockSynced) serverClockOffsetMs + nowElapsedMs else System.currentTimeMillis()
-        val extraMs = (serverNowMs - session.progressAnchorMs).coerceIn(0L, 12_000L)
+        val extraMs = (serverNowMs - session.progressAnchorMs).coerceIn(0L, 25_000L)
         val capMs = (target - 1000L).coerceAtLeast(session.progressMs)
         return (session.progressMs + extraMs).coerceAtMost(capMs)
+    }
+
+    fun dismissCompletedQuest() {
+        _ui.update {
+            it.copy(
+                completedQuest = null,
+                quiz = if (it.quiz?.completed == true) null else it.quiz,
+            )
+        }
     }
 
     private var collectJob: Job? = null
@@ -373,7 +396,7 @@ class AppModel(private val context: Context, baseUrl: String) {
      * server path can be validated on an emulator, which has no Bluetooth.
      * boot_id is prefixed "emulator-fixture" and no session_id is attached,
      * so the server retains them as diagnostics; they can never score quest
-     * progress.
+     * progress (debug fixture only).
      */
     fun injectFixtureTelemetry() {
         val device = _ui.value.deviceId ?: return
@@ -631,6 +654,8 @@ class AppModel(private val context: Context, baseUrl: String) {
     @Volatile private var activeQuestIdTracked: UUID? = null
     @Volatile private var activeQuestStartedAtMs = 0L
     @Volatile private var lastQuizSessionId: UUID? = null
+    @Volatile private var baselineCompletionSeeded = false
+    private val shownCompletionPages = HashSet<String>()
 
     private fun updateProximityAlert() {
         val active = _ui.value.activeSession
@@ -715,16 +740,29 @@ class AppModel(private val context: Context, baseUrl: String) {
         val out = ByteArray(17 + 24)
         if (session != null && session.getString("state") == "active") {
             val view = _ui.value.activeSession
-            val shownProgress = if (view != null && view.state == "active") {
-                displayProgressMs(view)
-            } else {
-                session.optLong("progress_ms")
-            }
             val runningFlag = view != null &&
                 view.state == "active" &&
                 view.timerRunning &&
                 _ui.value.proximityAlert == null &&
                 view.progressMs < (view.targetMs ?: 0L)
+            val shownProgress = if (view != null && view.state == "active") {
+                val raw = displayProgressMs(view)
+                val target = view.targetMs ?: 0L
+                if (runningFlag && target > 0L) {
+                    val cap = (target - 1000L).coerceAtLeast(view.progressMs)
+                    (raw + 250L).coerceAtMost(cap)
+                } else {
+                    raw
+                }
+            } else {
+                session.optLong("progress_ms")
+            }
+            val usedExtraMs = if (view != null && view.state == "active") {
+                (shownProgress - view.progressMs).coerceAtLeast(0L)
+            } else 0L
+            val remBudgetSec = if (runningFlag) {
+                ((25_000L - usedExtraMs).coerceAtLeast(0L) / 1000L).coerceIn(0L, 25L)
+            } else 0L
             out[0] = 1
             out[1] = when (session.getString("quest_id")) {
                 "together" -> 1; "explore" -> 2; "quiz" -> 5; else -> 3 // 3 = legacy heart
@@ -736,12 +774,17 @@ class AppModel(private val context: Context, baseUrl: String) {
             putU16(out, 12, fnv16(tokenBytes(session.optString("token"))))
             out[14] = 0
             out[15] = if (runningFlag) 1 else 0
+            out[16] = remBudgetSec.toByte()
         }
         val completion = ds.optJSONObject("completion")
         if (completion != null) {
             val id = completion.optString("completion_event_id", "")
             if (id.isNotEmpty() && !deliveredCompletions.contains(id)) {
                 out[14] = 1
+                val qid = completion.optString("quest_id", "")
+                out[1] = when (qid) {
+                    "together" -> 1; "explore" -> 2; "quiz" -> 5; else -> 0
+                }
                 val bytes = id.toByteArray(Charsets.US_ASCII)
                 System.arraycopy(bytes, 0, out, 17, minOf(bytes.size, 23))
                 deliveredCompletions.add(id)
@@ -1288,10 +1331,15 @@ class AppModel(private val context: Context, baseUrl: String) {
                 }
                 return@runCatching
             }
+            val reqT0 = SystemClock.elapsedRealtime()
             val ds = api.deviceState(devId)
+            val reqT1 = SystemClock.elapsedRealtime()
+            val rtt = (reqT1 - reqT0).coerceAtLeast(0L)
             runCatching { Instant.parse(ds.optString("server_time")).toEpochMilli() }.getOrNull()?.let { srvMs ->
-                serverClockOffsetMs = srvMs - SystemClock.elapsedRealtime()
-                serverClockSynced = true
+                if (!serverClockSynced || rtt <= 1200L) {
+                    serverClockOffsetMs = srvMs - (reqT0 + rtt / 2L)
+                    serverClockSynced = true
+                }
             }
             val session = ds.optJSONObject("session")
             val active = session != null && session.optString("state") == "active"
@@ -1330,6 +1378,47 @@ class AppModel(private val context: Context, baseUrl: String) {
                     _ui.update { it.copy(quiz = null) }
                 }
             }
+            val completion = ds.optJSONObject("completion")
+            val completionId = completion?.optString("completion_event_id", "") ?: ""
+            if (!baselineCompletionSeeded) {
+                baselineCompletionSeeded = true
+                if (completionId.isNotEmpty()) {
+                    shownCompletionPages.add(completionId)
+                }
+            } else if (session == null && completion != null && completionId.isNotEmpty() &&
+                shownCompletionPages.add(completionId)
+            ) {
+                val compSidStr = completion.optString("session_id", "")
+                val compSid = runCatching { UUID.fromString(compSidStr) }.getOrNull()
+                val compQuest = completion.optString("quest_id", "").ifBlank {
+                    completion.optJSONObject("interaction")?.optString("quest_id", "") ?: ""
+                }
+                if (compSid != null && compQuest.isNotBlank()) {
+                    if (compQuest == "quiz") {
+                        refreshQuizSync(compSidStr)
+                    }
+                    val freshPet = runCatching { api.pet() }.getOrNull()
+                    if (freshPet != null) {
+                        _ui.update { it.copy(pet = freshPet) }
+                    }
+                    refreshAchievements()
+                    val curUi = _ui.value
+                    val petObj = freshPet ?: curUi.pet
+                    val view = CompletedQuestView(
+                        completionEventId = completionId,
+                        sessionId = compSid,
+                        questId = compQuest,
+                        demo = completion.optBoolean("demo", false),
+                        pointsAwarded = completion.optInt("points_awarded", 100),
+                        xpAwarded = completion.optInt("xp_awarded", 100),
+                        partnerName = curUi.partnerName,
+                        level = petObj?.optInt("level", 1) ?: 1,
+                        lifetimeXp = petObj?.optInt("lifetime_xp", 0) ?: 0,
+                        quiz = if (compQuest == "quiz") curUi.quiz else null,
+                    )
+                    _ui.update { it.copy(completedQuest = view) }
+                }
+            }
             relayDeviceStateToWearable(ds)
         }.onFailure {
             android.util.Log.w("AppModel", "refreshDeviceState failed: ${it.message}")
@@ -1351,6 +1440,7 @@ class AppModel(private val context: Context, baseUrl: String) {
                         pinVerifyStatus = null,
                         pinVerifyIsError = false,
                         pinVerifyBusy = false,
+                        completedQuest = null,
                     )
                 }
                 api.createSession(questId, demo, landmarkId)
@@ -1391,6 +1481,7 @@ class AppModel(private val context: Context, baseUrl: String) {
                         pinVerifyStatus = null,
                         pinVerifyIsError = false,
                         pinVerifyBusy = false,
+                        completedQuest = null,
                     )
                 }
                 refreshDeviceStateSync()

@@ -651,6 +651,11 @@ class SessionBrief(BaseModel):
 class CompletionEvent(BaseModel):
     completion_event_id: str
     session_id: uuid.UUID
+    quest_id: QuestId | None = None
+    demo: bool = False
+    points_awarded: int = 100
+    xp_awarded: int = 100
+    completed_at: datetime | None = None
     interaction: InteractionSnapshot | None = None
 
 

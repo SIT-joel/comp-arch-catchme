@@ -1,6 +1,6 @@
 """In-memory SSE fan-out plus the DB-backed global state version.
 
-Single-process design (one API worker) PostgreSQL is
+Single-process design (one API worker); PostgreSQL is
 the source of truth: clients that miss an event refetch the canonical snapshot.
 """
 

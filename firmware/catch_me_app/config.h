@@ -34,7 +34,7 @@
 #define CM_DISC_ADV_LEN 4
 
 // A discovery observation contributes presence for at most this long after
-// its physical reception.
+// its physical reception (15 s rule).
 #define CM_DISC_OBS_MAX_MS 15000
 // Bounded buffer of latest unique observed discovery tokens.
 #define CM_DISC_BUFFER 16
@@ -134,7 +134,7 @@
 #define CM_PULSE_ENABLED 0
 #endif
 
-// --- Pet (v2) ---
+// --- Pet (v2; rates from the bench-verified fork's the pet specification) ---
 #define CM_HUNGER_DECAY_MS 600000UL           // -1 hunger per 10 min
 #define CM_HAPPY_DECAY_MS 900000UL            // -1 happiness per 15 min alone
 #define CM_HAPPY_DECAY_TOGETHER_MS 2700000UL  // -1 per 45 min with partner here

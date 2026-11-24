@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api, Interaction, Me, QuizState, Reading, Session } from "../api";
 import { buildSegments, formatDuration, GraphPoint } from "../graph";
 
@@ -222,7 +222,17 @@ export default function SessionPage({ me, refreshMe }: { me: Me; refreshMe: () =
         )}
         {session.state === "completed" && (
           <div className="success">
-            Completed! Each participant earned 100 points and 100 XP. {isCreator ? "You created this session." : ""}
+            <h3>
+              Quest Complete! — {title}
+              {session.demo && <span className="tag demo-tag">demo</span>}
+            </h3>
+            <p>
+              <strong>+100 points · +100 XP each</strong> awarded to both participants.{" "}
+              {isCreator ? "You started this quest." : ""}
+            </p>
+            <div className="row gap">
+              <Link className="button" to="/">Back to Dashboard</Link>
+            </div>
           </div>
         )}
         {session.state === "cancelled" && <div className="muted">Cancelled — incomplete progress was not awarded.</div>}

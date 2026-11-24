@@ -195,7 +195,7 @@ async def main():
                    if active else {})
 
     # The wearable's TDD schedule drops the link every ~8.5 s by design
-    #: reconnect constantly, like the phone's supervisor.
+    # Reconnect constantly, like the phone's supervisor.
     while time.time() - t0 < seconds:
         client = bleak.BleakClient(ADDRESS, timeout=8.0)
         ok = False

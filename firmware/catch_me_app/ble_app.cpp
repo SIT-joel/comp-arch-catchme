@@ -635,7 +635,11 @@ void BleApp::apply_session_message(const uint8_t* p, uint16_t len) {
   session_.token_hash = p[12] | ((uint16_t)p[13] << 8);
   uint8_t fresh_completion = p[14];
   session_.timer_running = (session_.active != 0) && ((p[15] & 0x01) != 0);
+  session_.max_local_advance_ms = (uint32_t)p[16] * 1000UL;
   session_.rx_at_ms = millis();
+  if (fresh_completion) {
+    completion_quest_ = p[1];
+  }
   memcpy(completion_, p + 17, 23);
   completion_[23] = 0;
   // Bind advertised heartbeats to the active session token.

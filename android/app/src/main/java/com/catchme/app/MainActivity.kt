@@ -142,7 +142,121 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppScreens(model: AppModel) {
     val ui by model.ui.collectAsState()
-    if (!ui.signedIn) LoginScreen(model) else MainScreen(model, ui)
+    when {
+        !ui.signedIn -> LoginScreen(model)
+        ui.completedQuest != null -> QuestCompleteScreen(
+            completed = ui.completedQuest!!,
+            ui = ui,
+            onDone = { model.dismissCompletedQuest() },
+        )
+        else -> MainScreen(model, ui)
+    }
+}
+
+@Composable
+fun QuestCompleteScreen(
+    completed: AppModel.CompletedQuestView,
+    ui: AppModel.UiState,
+    onDone: () -> Unit,
+) {
+    val qTitle = when (completed.questId) {
+        "together" -> "Together Time"
+        "explore" -> "Outdoor Visit"
+        "quiz" -> "Know Your Partner"
+        else -> completed.questId
+    }
+    val qSummary = when (completed.questId) {
+        "together" -> "Mutual wearable Bluetooth proximity and PIN checks verified."
+        "explore" -> "Outdoor visit verified with mutual Bluetooth proximity and GPS."
+        "quiz" -> "All Know-Your-Partner quiz questions answered with your partner."
+        else -> "Shared quest verified."
+    }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Spacer(Modifier.height(8.dp))
+        Text("Quest Complete!", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+        Text(
+            qTitle + if (completed.demo) " · Demo mode" else "",
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Text(
+            "Completed with ${completed.partnerName ?: "your partner"}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "+${completed.pointsAwarded} Points · +${completed.xpAwarded} XP",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    "Level ${completed.level} · ${completed.lifetimeXp} total XP",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                ui.pet?.let { pet ->
+                    val species = if (pet.isNull("species")) "" else pet.optString("species", "")
+                    val rawPetName = if (pet.isNull("name")) "" else pet.optString("name", "")
+                    val petName = if (rawPetName.isBlank() || rawPetName.equals("null", ignoreCase = true)) {
+                        species.replaceFirstChar { it.uppercase() }
+                    } else rawPetName
+                    val st = pet.optInt("evolution_stage", 1)
+                    val stLabel = when (st) { 2 -> "teen"; 3 -> "adult"; else -> "baby" }
+                    if (species.isNotBlank()) {
+                        Text(
+                            "$petName (${species.replaceFirstChar { it.uppercase() }} · $stLabel)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
+        }
+        Text(qSummary, style = MaterialTheme.typography.bodyMedium)
+        ui.newAchievement?.let { name ->
+            val age = System.currentTimeMillis() - ui.newAchievementAt
+            if (age < 15_000L) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Achievement unlocked!", style = MaterialTheme.typography.titleMedium)
+                        Text(name, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+        val quiz = completed.quiz
+        if (completed.questId == "quiz" && quiz != null) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Quiz Results", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Your score: ${quiz.myCorrect}/${quiz.myTotal} right · Partner: ${quiz.partnerCorrect}/${quiz.partnerTotal} right",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    quiz.results.forEach { q ->
+                        val chosenStr = q.choice?.let { "${'A' + it}: ${q.options.getOrNull(it) ?: ""}" } ?: "Unanswered"
+                        val rightStr = q.rightIndex?.let { "${'A' + it}: ${q.options.getOrNull(it) ?: ""}" }
+                        Text(
+                            if (q.isCorrect == true) "Q${q.index + 1}: ✓ $chosenStr (Right!)"
+                            else "Q${q.index + 1}: ✗ You picked $chosenStr" + if (rightStr != null) " · Right: $rightStr" else "",
+                            color = if (q.isCorrect == true) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+            Text("Back to Quests")
+        }
+    }
 }
 
 @Composable

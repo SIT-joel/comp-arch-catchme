@@ -408,6 +408,16 @@ def test_together_quest_completes_and_awards_exactly_once(clients):
     cancel = clients["a"].post(f"/api/v1/sessions/{session_id}/cancel")
     assert cancel.status_code == 409
 
+    # Device state surfaces enriched completion metadata for Quest Complete pages.
+    ds = clients["a"].get(f"/api/v1/devices/{clients['a_device']}/state")
+    assert ds.status_code == 200
+    comp = ds.json()["completion"]
+    assert comp is not None
+    assert comp["quest_id"] == "together"
+    assert comp["demo"] is True
+    assert comp["points_awarded"] == 100
+    assert comp["xp_awarded"] == 100
+
     # Transaction history shows exactly one award row.
     txs = clients["a"].get("/api/v1/transactions").json()["transactions"]
     awards = [t for t in txs if t["kind"] == "quest_award"]

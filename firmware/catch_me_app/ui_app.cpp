@@ -14,9 +14,11 @@ static void fill_ellipse(TinyScreen& d, int cx, int cy, int rx, int ry, uint8_t 
 static uint32_t display_session_progress_ms(const SessionStateMsg& s, bool paused) {
   if (!s.active || s.target_ms == 0) return s.progress_ms;
   if (s.progress_ms >= s.target_ms) return s.target_ms;
-  if (!s.timer_running || paused || s.rx_at_ms == 0) return s.progress_ms;
+  if (!s.timer_running || paused || s.rx_at_ms == 0 || s.max_local_advance_ms == 0) {
+    return s.progress_ms;
+  }
   uint32_t dt = millis() - s.rx_at_ms;
-  if (dt > 15000UL) dt = 15000UL;
+  if (dt > s.max_local_advance_ms) dt = s.max_local_advance_ms;
   uint32_t disp = s.progress_ms + dt;
   uint32_t cap = s.target_ms > 1000UL ? (s.target_ms - 1000UL) : 0UL;
   if (cap < s.progress_ms) cap = s.progress_ms;
@@ -35,6 +37,13 @@ void UiApp::tick() {
   uint8_t buttons = display_.getButtons();
   uint8_t pressed = buttons & ~last_buttons_;  // edge only
   last_buttons_ = buttons;
+  if (reward_until_ms_ != 0 && millis() < reward_until_ms_ && pressed != 0) {
+    const uint8_t ph = g_ble.interaction().phase;
+    if (!(screen_ == SCR_INTERACTION && (ph == 1 || ph == 3))) {
+      reward_until_ms_ = 0;
+      return;
+    }
+  }
   const InteractionStateMsg& interaction = g_ble.interaction();
   if (interaction.phase != last_phase_) {
     last_phase_ = interaction.phase;
@@ -374,23 +383,20 @@ void UiApp::apply_interaction_ack(const uint8_t* payload, uint16_t len) {
 
 void UiApp::render() {
   display_.clearScreen();
-  // Reward banner (8 s) overrides ordinary screens: the quest's XP impact
-  // must be visible on the wearable itself, not only in the phone app. The
-  // PIN-evidence screen keeps ownership of the display.
-  if (reward_until_ms_ != 0 && millis() < reward_until_ms_ &&
-      screen_ != SCR_INTERACTION) {
-    display_.setFont(liberationSans_10ptFontInfo);
+  // Dedicated Quest Complete screen (15 s or any button): always visible once
+  // a quest finishes unless an active PIN entry stage has taken ownership.
+  const uint8_t inter_ph = g_ble.interaction().phase;
+  const bool pin_entry_active = (screen_ == SCR_INTERACTION) && (inter_ph == 1 || inter_ph == 3);
+  if (reward_until_ms_ != 0 && millis() < reward_until_ms_ && !pin_entry_active) {
+    display_.setFont(liberationSans_8ptFontInfo);
     display_.setCursor(0, 0);
     display_.fontColor(TS_8b_Green, TS_8b_Black);
     display_.print(reward_title_);
-    display_.setFont(liberationSans_8ptFontInfo);
-    display_.setCursor(0, 20);
+    display_.setCursor(0, 14);
     display_.fontColor(TS_8b_White, TS_8b_Black);
-    display_.print("+100 points");
-    display_.setCursor(0, 32);
-    display_.print("+100 XP");
+    display_.print("+100 pts  +100 XP");
     const uint8_t lvl = g_petcore.server_level();
-    display_.setCursor(0, 44);
+    display_.setCursor(0, 28);
     if (reward_level_at_ != 0 && lvl > reward_level_at_) {
       display_.fontColor(TS_8b_Yellow, TS_8b_Black);
       display_.print("LEVEL UP! -> ");
@@ -403,6 +409,9 @@ void UiApp::render() {
       display_.fontColor(TS_8b_Gray, TS_8b_Black);
       display_.print("syncing level...");
     }
+    display_.setCursor(0, 54);
+    display_.fontColor(TS_8b_Gray, TS_8b_Black);
+    display_.print("Btn: continue");
     return;
   }
   if (reward_until_ms_ != 0 && millis() >= reward_until_ms_) {

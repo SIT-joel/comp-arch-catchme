@@ -3,7 +3,7 @@
 Stands in for wearable button input by submitting PINs through the API, so
 every server-side quest/shop/discovery path can be exercised without physical
 button entry. Telemetry injected here uses clearly labeled FIXTURE boot ids
- and can never be presented as hardware evidence.
+and can never be presented as hardware evidence.
 
 Usage: backend/.venv/Scripts/python.exe tools/test_feature_sweep.py [base_url]
 Requires the dev server + seeded accounts miya/devpass-a and toma/devpass-b.

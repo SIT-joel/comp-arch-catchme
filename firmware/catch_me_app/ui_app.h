@@ -72,7 +72,7 @@ class UiApp {
       quiz_pending_ = false;  // the server accepted our answer
     }
     if (quiz_active_ && !active && quiz_total_ > 0) {
-      flash_reward("QUIZ COMPLETE");
+      flash_reward("QUIZ DONE!");
     }
     quiz_active_ = active != 0;
     quiz_idx_ = idx;
@@ -82,16 +82,14 @@ class UiApp {
     }
   }
 
-  // Short (8 s) award banner overriding the current screen: title, the
-  // exactly-once +100 points/+100 XP award, and the live server level
-  // (shows "LEVEL UP" as soon as the pet sync delivers the new level).
-  // Never overrides the raid fight or the PIN-evidence screen — those own
-  // the display; the banner appears when they yield.
+  // Dedicated Quest Complete screen (15 s, or dismiss earlier via any button):
+  // title, the exactly-once +100 pts / +100 XP award, and server level.
   void flash_reward(const char* title) {
     strncpy(reward_title_, title, sizeof(reward_title_) - 1);
     reward_title_[sizeof(reward_title_) - 1] = 0;
-    reward_until_ms_ = millis() + 8000;
+    reward_until_ms_ = millis() + 15000UL;
     reward_level_at_ = g_petcore.server_level();
+    screen_ = SCR_PET;
     SerialUSB.print("ui: reward banner: ");
     SerialUSB.println(reward_title_);
   }
@@ -207,6 +205,12 @@ class UiApp {
     return (screen_ == SCR_PET || screen_ == SCR_CARE) &&
            (game_view_ || g_petcore.game_active() || feed_anim_active() ||
             pet_anim_active() || game_finish_anim_active());
+  }
+  bool wants_timer_refresh() const {
+    const SessionStateMsg& s = g_ble.session();
+    if (!s.active || !s.timer_running) return false;
+    return (screen_ == SCR_INTERACTION && g_ble.interaction().phase == 2) ||
+           (screen_ == SCR_GPS && s.quest == 2);
   }
 
  private:

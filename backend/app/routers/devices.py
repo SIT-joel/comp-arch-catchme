@@ -110,6 +110,11 @@ def _session_brief(quest_session: QuestSession, db: Session, user_id: uuid.UUID)
                 if (now - anchor).total_seconds() * 1000 <= display_grace_ms:
                     timer_running = True
                     progress_anchor_at = anchor
+            elif quest_session.demo and quest_session.activated_at is not None:
+                anchor = quest_session.activated_at
+                if (now - anchor).total_seconds() * 1000 <= display_grace_ms:
+                    timer_running = True
+                    progress_anchor_at = anchor
     return SessionBrief(
         session_id=quest_session.id,
         quest_id=quest_session.quest_id,
@@ -216,6 +221,9 @@ def device_state(
             completion = CompletionEvent(
                 completion_event_id=completion_event_id(finished.id),
                 session_id=finished.id,
+                quest_id=finished.quest_id,
+                demo=finished.demo,
+                completed_at=finished.completed_at,
                 interaction=(
                     InteractionSnapshot(**finished_interaction)
                     if finished_interaction is not None

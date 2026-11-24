@@ -1,7 +1,7 @@
 """Unit tests for the pure interval/evidence mathematics.
 
-These encode the numeric rules from the specification and the boundary
-the evidence boundary cases. No database involved.
+These encode the numeric interval rules and evidence boundary cases.
+No database involved.
 """
 
 import uuid
