@@ -139,10 +139,13 @@ def peer_observation_points(
     - Record must carry a capture time and acceptable clock uncertainty.
     - The observed device must be the expected partner and carry the active
       session token (evidence binds to the session).
+    - Repeated records for the same (peer_boot_id, heartbeat_sequence) keep
+      the smallest observation_age_ms (then earliest captured_at) so integer-second
+      clock truncation never drifts observed_at backwards on later batches.
     - Repeated or stale heartbeat counters are rejected: strictly increasing
       per peer boot, evaluated in capture order.
     """
-    eligible: list[PeerObservationPoint] = []
+    best_by_hb: dict[tuple[str, int], tuple[int, datetime, PeerObservationPoint]] = {}
     for r in records:
         captured_at = r["captured_at"]
         uncertainty = r["clock_uncertainty_ms"]
@@ -160,14 +163,22 @@ def peer_observation_points(
         observed_at = captured_at - timedelta(milliseconds=age)
         if not_before is not None and observed_at < not_before:
             continue
-        eligible.append(
-            PeerObservationPoint(
-                observed_at=observed_at,
-                peer_boot_id=r["peer_boot_id"] or "",
-                heartbeat_sequence=r["peer_heartbeat_sequence"] or 0,
+        peer_boot_id = r["peer_boot_id"] or ""
+        hb_seq = r["peer_heartbeat_sequence"] or 0
+        key = (peer_boot_id, hb_seq)
+        prev = best_by_hb.get(key)
+        if prev is None or (age, captured_at) < (prev[0], prev[1]):
+            best_by_hb[key] = (
+                age,
+                captured_at,
+                PeerObservationPoint(
+                    observed_at=observed_at,
+                    peer_boot_id=peer_boot_id,
+                    heartbeat_sequence=hb_seq,
+                ),
             )
-        )
 
+    eligible = [entry[2] for entry in best_by_hb.values()]
     eligible.sort(key=lambda p: (p.observed_at, p.heartbeat_sequence))
 
     last_by_boot: dict[str, int] = {}
@@ -226,14 +237,24 @@ def peer_presence_intervals(
     records_a are captured by user A's device; each must report observing
     device B (and vice versa) for a moment to count. Each side's presence
     spans follow the <=10 s successive-observation rule; the awarded time is
-    the intersection of the two sides' spans.
+    the intersection of the two sides' spans, clipped at not_before when set
+    so pre-phase observations can establish continuity without crediting any
+    time before not_before.
     """
-    points_a = peer_observation_points(records_a, device_b, session_token, clock_uncertainty_max_ms, not_before)
-    points_b = peer_observation_points(records_b, device_a, session_token, clock_uncertainty_max_ms, not_before)
+    points_a = peer_observation_points(records_a, device_b, session_token, clock_uncertainty_max_ms)
+    points_b = peer_observation_points(records_b, device_a, session_token, clock_uncertainty_max_ms)
 
     spans_a = gap_intervals([p.observed_at for p in points_a], peer_gap_max_ms)
     spans_b = gap_intervals([p.observed_at for p in points_b], peer_gap_max_ms)
-    return intersect(spans_a, spans_b)
+    mutual = intersect(spans_a, spans_b)
+    if not_before is None:
+        return mutual
+    clipped: list[Interval] = []
+    for start, end in mutual:
+        s = max(start, not_before)
+        if end > s:
+            clipped.append((s, end))
+    return clipped
 
 
 def together_intervals(

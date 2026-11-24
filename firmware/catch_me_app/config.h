@@ -101,15 +101,15 @@
 // drift (~0.9 s/cycle), so the scan/advertise windows sweep past each
 // other within a couple of minutes regardless of reconnect timing.
 #if DEVICE_ID == 2
-#define CM_TDD_LINKED_MS 4400
-#define CM_TDD_PREADV_MS 1000
-#define CM_TDD_SCAN_MS 2200
-#define CM_TDD_ADV_MS 1900
+#define CM_TDD_LINKED_MS 3900
+#define CM_TDD_PREADV_MS 1500
+#define CM_TDD_SCAN_MS 2400
+#define CM_TDD_ADV_MS 2000
 #else
-#define CM_TDD_LINKED_MS 3800
-#define CM_TDD_PREADV_MS 500
-#define CM_TDD_SCAN_MS 1700
-#define CM_TDD_ADV_MS 1900
+#define CM_TDD_LINKED_MS 3400
+#define CM_TDD_PREADV_MS 1200
+#define CM_TDD_SCAN_MS 2000
+#define CM_TDD_ADV_MS 2000
 #endif
 
 // --- v2 raid gate experiment ---

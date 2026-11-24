@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import get_db
 from app.deps import get_current_user, get_pair_partner
-from app.models import Device, QuestSession, SessionParticipant, User
+from app.models import Device, QuestSession, SessionInteraction, SessionParticipant, User
 from app.schemas import (
     BindIn,
     BindOut,
@@ -21,7 +22,7 @@ from app.schemas import (
 )
 from app.security import hash_token
 from app.services import evidence
-from app.services.evaluation import completion_event_id, latest_valid_gps
+from app.services.evaluation import completion_event_id, evaluate_session, latest_valid_gps
 from app.services.interactions import snapshot as interaction_snapshot
 from app.events import get_state_version
 
@@ -78,6 +79,37 @@ def _session_brief(quest_session: QuestSession, db: Session, user_id: uuid.UUID)
         and me_participant is not None
         and me_participant.accepted_at is None
     )
+    timer_running = False
+    progress_anchor_at = None
+    if (
+        quest_session.state == "active"
+        and quest_session.target_ms
+        and quest_session.progress_ms < quest_session.target_ms
+    ):
+        peer_gap_max_ms = get_settings().peer_gap_max_ms
+        display_grace_ms = peer_gap_max_ms + 5000
+        now = datetime.now(timezone.utc)
+        if quest_session.quest_id == "together":
+            interaction_row = db.get(SessionInteraction, quest_session.id)
+            if (
+                interaction_row is not None
+                and interaction_row.phase == "timing"
+                and interaction_row.timing_started_at is not None
+            ):
+                intervals, _ = evaluate_session(
+                    db, quest_session, not_before=interaction_row.timing_started_at
+                )
+                anchor = intervals[-1][1] if intervals else interaction_row.timing_started_at
+                if (now - anchor).total_seconds() * 1000 <= display_grace_ms:
+                    timer_running = True
+                    progress_anchor_at = anchor
+        elif quest_session.quest_id == "explore":
+            intervals, _ = evaluate_session(db, quest_session)
+            if intervals:
+                anchor = intervals[-1][1]
+                if (now - anchor).total_seconds() * 1000 <= display_grace_ms:
+                    timer_running = True
+                    progress_anchor_at = anchor
     return SessionBrief(
         session_id=quest_session.id,
         quest_id=quest_session.quest_id,
@@ -88,6 +120,8 @@ def _session_brief(quest_session: QuestSession, db: Session, user_id: uuid.UUID)
         progress_ms=quest_session.progress_ms,
         needs_my_accept=needs_my_accept,
         interaction=interaction_snapshot(db, quest_session, user_id),
+        timer_running=timer_running,
+        progress_anchor_at=progress_anchor_at,
     )
 
 

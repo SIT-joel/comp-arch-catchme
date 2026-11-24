@@ -410,3 +410,69 @@ def test_explore_demo_indoor_allows_any_fresh_gps_but_requires_valid_gps_and_pee
             enforce_geofence=False,
         )
     ) == 0
+
+
+def test_together_not_before_clips_pre_anchor_span_and_scores_first_post_point():
+    # Pre-PIN (-3s) and first post-PIN (+4s) observations form one 7 s gap
+    # within PEER_GAP (10 s); only the portion at/after timing_started_at (0s) counts.
+    times = [-3.0, 4.0]
+    a = [record(i, at(t), peer_heartbeat=i + 1) for i, t in enumerate(times)]
+    b = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="device-a-42", peer_heartbeat=i + 1)
+        for i, t in enumerate(times)
+    ]
+    intervals = evidence.together_intervals(
+        a, b,
+        device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+        peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+        not_before=at(0),
+    )
+    assert intervals == [(at(0), at(4))]
+    assert evidence.total_ms(intervals) == 4_000
+
+
+def test_together_not_before_rejects_pre_only_and_large_gap():
+    pre_only_times = [-6.0, -2.0]
+    a_pre = [record(i, at(t), peer_heartbeat=i + 1) for i, t in enumerate(pre_only_times)]
+    b_pre = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="device-a-42", peer_heartbeat=i + 1)
+        for i, t in enumerate(pre_only_times)
+    ]
+    assert evidence.total_ms(
+        evidence.together_intervals(
+            a_pre, b_pre,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            not_before=at(0),
+        )
+    ) == 0
+
+    gap_times = [-12.0, 2.0]  # 14 s > PEER_GAP (10 s): must not bridge
+    a_gap = [record(i, at(t), peer_heartbeat=i + 1) for i, t in enumerate(gap_times)]
+    b_gap = [
+        record(i, at(t), peer_device=DEVICE_A, peer_boot="device-a-42", peer_heartbeat=i + 1)
+        for i, t in enumerate(gap_times)
+    ]
+    assert evidence.total_ms(
+        evidence.together_intervals(
+            a_gap, b_gap,
+            device_a=DEVICE_A, device_b=DEVICE_B, session_token=TOKEN,
+            peer_gap_max_ms=PEER_GAP, clock_uncertainty_max_ms=MAX_UNCERTAINTY,
+            not_before=at(0),
+        )
+    ) == 0
+
+
+def test_duplicate_heartbeat_keeps_smallest_age_and_never_drifts_backwards():
+    a = [
+        record(0, at(0), peer_heartbeat=1, observation_age=0),
+        record(1, at(10), peer_heartbeat=2, observation_age=200),
+        # Simulate integer-second capture truncation on a repeated copy of hb=2
+        # whose computed observed_at (14.0 - 5.2 = 8.8s) drifts 1s earlier.
+        record(2, at(14), peer_heartbeat=2, observation_age=5_200),
+    ]
+    b = [
+        record(0, at(0), peer_device=DEVICE_A, peer_boot="device-a-42", peer_heartbeat=1, observation_age=0),
+        record(1, at(10), peer_device=DEVICE_A, peer_boot="device-a-42", peer_heartbeat=2, observation_age=0),
+    ]
+    assert together_ms(a, b) == 9_800

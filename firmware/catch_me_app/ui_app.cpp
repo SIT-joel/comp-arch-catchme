@@ -11,6 +11,18 @@
 static void fill_row(TinyScreen& d, int x0, int x1, int y, uint8_t color);
 static void fill_ellipse(TinyScreen& d, int cx, int cy, int rx, int ry, uint8_t color);
 
+static uint32_t display_session_progress_ms(const SessionStateMsg& s, bool paused) {
+  if (!s.active || s.target_ms == 0) return s.progress_ms;
+  if (s.progress_ms >= s.target_ms) return s.target_ms;
+  if (!s.timer_running || paused || s.rx_at_ms == 0) return s.progress_ms;
+  uint32_t dt = millis() - s.rx_at_ms;
+  if (dt > 15000UL) dt = 15000UL;
+  uint32_t disp = s.progress_ms + dt;
+  uint32_t cap = s.target_ms > 1000UL ? (s.target_ms - 1000UL) : 0UL;
+  if (cap < s.progress_ms) cap = s.progress_ms;
+  return disp > cap ? cap : disp;
+}
+
 UiApp g_ui;
 
 void UiApp::begin() {
@@ -632,15 +644,21 @@ void UiApp::render_interaction() {
            strcmp(interaction_status_, "CODE EXPIRED") == 0) ? TS_8b_Red
         : interaction_status_[0] ? TS_8b_Yellow : TS_8b_Gray;
     if (pin_edit_) {
-      char entered[] = {' ', char('0' + pin_digits_[0]), ' ', char('0' + pin_digits_[1]),
-                        ' ', char('0' + pin_digits_[2]), ' ', char('0' + pin_digits_[3]), 0};
+      static const uint8_t kDigitX[4] = {38, 52, 66, 80};
       display_.setCursor(0, 31);
       display_.fontColor(TS_8b_White, TS_8b_Black);
-      display_.print("Enter: ");
-      display_.print(entered);
-      display_.setCursor(0, 41);
-      for (uint8_t i = 0; i < pin_digit_; ++i) display_.print("  ");
-      display_.print("^");
+      display_.print("Enter:");
+      for (uint8_t i = 0; i < 4; ++i) {
+        display_.setCursor(kDigitX[i], 31);
+        display_.fontColor(i == pin_digit_ ? TS_8b_Yellow : TS_8b_White, TS_8b_Black);
+        char d[2] = {char('0' + pin_digits_[i]), 0};
+        display_.print(d);
+      }
+      // Crisp 5x3 upward arrow centered directly under the 4-6 px digit glyph.
+      const uint8_t ax = kDigitX[pin_digit_] + 2;
+      display_.drawPixel(ax, 42, TS_8b_Yellow);
+      display_.drawLine((uint8_t)(ax - 1), 43, (uint8_t)(ax + 1), 43, TS_8b_Yellow);
+      display_.drawLine((uint8_t)(ax - 2), 44, (uint8_t)(ax + 2), 44, TS_8b_Yellow);
       display_.fontColor(TS_8b_Gray, TS_8b_Black);
       display_.setCursor(0, 50);
       display_.print("UR + UL - LR next");
@@ -663,10 +681,12 @@ void UiApp::render_interaction() {
 
   if (interaction.phase == 2) {
     const SessionStateMsg& s = g_ble.session();
-    const uint32_t rem_s = s.target_ms > s.progress_ms ? (s.target_ms - s.progress_ms + 999UL) / 1000UL : 0;
+    const bool bt_paused = quest_bt_out_of_range();
+    const uint32_t disp_ms = display_session_progress_ms(s, bt_paused);
+    const uint32_t rem_s = s.target_ms > disp_ms ? (s.target_ms - disp_ms + 999UL) / 1000UL : 0;
     display_.print("TOGETHER TIME");
     display_.setCursor(0, 14);
-    if (quest_bt_out_of_range()) {
+    if (bt_paused) {
       display_.fontColor(TS_8b_Red, TS_8b_Black);
       display_.print("! BT OUT OF RANGE !");
       display_.setCursor(0, 25);
@@ -683,7 +703,7 @@ void UiApp::render_interaction() {
     display_.fontColor(TS_8b_White, TS_8b_Black);
     display_.print(rem_s);
     display_.print("s left (");
-    display_.print(s.progress_ms / 1000);
+    display_.print(disp_ms / 1000);
     display_.print("/");
     display_.print(s.target_ms / 1000);
     display_.print("s)");
@@ -1404,15 +1424,17 @@ void UiApp::render_gps() {
   }
 
   display_.setCursor(0, 47);
-  if (in_explore && quest_bt_out_of_range()) {
+  const bool bt_paused = quest_bt_out_of_range();
+  if (in_explore && bt_paused) {
     display_.fontColor(TS_8b_Red, TS_8b_Black);
     display_.print("! BT OUT OF RANGE !");
   } else if (in_explore) {
-    const uint32_t rem_s = sess.target_ms > sess.progress_ms ? (sess.target_ms - sess.progress_ms + 999UL) / 1000UL : 0;
+    const uint32_t disp_ms = display_session_progress_ms(sess, bt_paused);
+    const uint32_t rem_s = sess.target_ms > disp_ms ? (sess.target_ms - disp_ms + 999UL) / 1000UL : 0;
     display_.fontColor(TS_8b_Gray, TS_8b_Black);
     display_.print(rem_s);
     display_.print("s left (");
-    display_.print(sess.progress_ms / 1000);
+    display_.print(disp_ms / 1000);
     display_.print("/");
     display_.print(sess.target_ms / 1000);
     display_.print("s)");

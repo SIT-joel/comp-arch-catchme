@@ -85,6 +85,8 @@ struct SessionStateMsg {
   uint8_t partner_alias;
   uint16_t token_hash;    // active session token hash (binds peer evidence)
   char completion[24];    // completion event id ("" when none)
+  bool timer_running;     // server + phone live countdown gate
+  uint32_t rx_at_ms;      // local millis() when this snapshot arrived
 };
 
 struct InteractionStateMsg {

@@ -644,6 +644,8 @@ class SessionBrief(BaseModel):
     progress_ms: int
     needs_my_accept: bool = False
     interaction: InteractionSnapshot | None = None
+    timer_running: bool = False
+    progress_anchor_at: datetime | None = None
 
 
 class CompletionEvent(BaseModel):

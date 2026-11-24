@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -47,6 +48,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.catchme.app.ble.BleLink
 import com.catchme.app.data.AppModel
+import kotlinx.coroutines.delay
 import java.util.UUID
 
 /** Foreground-only companion app. */
@@ -411,11 +413,20 @@ fun MainScreen(model: AppModel, ui: AppModel.UiState) {
                             )
                         }
                     } else if (active.targetMs != null && active.targetMs > 0) {
-                        val frac = (active.progressMs.toFloat() / active.targetMs.toFloat()).coerceIn(0f, 1f)
-                        val remSec = ((active.targetMs - active.progressMs).coerceAtLeast(0L) + 999L) / 1000L
+                        var displayTickMs by remember(active.sessionId) { mutableStateOf(SystemClock.elapsedRealtime()) }
+                        LaunchedEffect(active.sessionId, active.timerRunning, active.progressMs, active.progressAnchorMs) {
+                            displayTickMs = SystemClock.elapsedRealtime()
+                            while (active.timerRunning) {
+                                delay(500L)
+                                displayTickMs = SystemClock.elapsedRealtime()
+                            }
+                        }
+                        val shownProgressMs = model.displayProgressMs(active, displayTickMs)
+                        val frac = (shownProgressMs.toFloat() / active.targetMs.toFloat()).coerceIn(0f, 1f)
+                        val remSec = ((active.targetMs - shownProgressMs).coerceAtLeast(0L) + 999L) / 1000L
                         LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
                         Text(
-                            "${remSec}s left (${active.progressMs / 1000}s / ${active.targetMs / 1000}s)",
+                            "${remSec}s left (${shownProgressMs / 1000}s / ${active.targetMs / 1000}s)",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }

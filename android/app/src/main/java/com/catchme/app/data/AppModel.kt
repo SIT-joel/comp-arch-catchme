@@ -1,6 +1,7 @@
 package com.catchme.app.data
 
 import android.content.Context
+import android.os.SystemClock
 import com.catchme.app.ble.BleLink
 import com.catchme.app.ble.Frame
 import com.catchme.app.ble.Message
@@ -19,6 +20,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -90,6 +92,8 @@ class AppModel(private val context: Context, baseUrl: String) {
         val partnerCodeVersion: Int = 0,
         val myPinConfirmed: Boolean = false,
         val partnerPinConfirmed: Boolean = false,
+        val timerRunning: Boolean = false,
+        val progressAnchorMs: Long? = null,
     )
 
     /** One achievement row for the achievements card (unlocked=false rows
@@ -144,6 +148,23 @@ class AppModel(private val context: Context, baseUrl: String) {
     @Volatile private var timeSynced = false
     @Volatile private var anchorEpoch = 0L
     @Volatile private var anchorUptime = 0L
+    @Volatile private var serverClockOffsetMs: Long = 0L
+    @Volatile private var serverClockSynced: Boolean = false
+
+    fun displayProgressMs(
+        session: SessionView,
+        nowElapsedMs: Long = SystemClock.elapsedRealtime(),
+    ): Long {
+        val target = session.targetMs ?: return session.progressMs
+        if (target <= 0L || session.progressMs >= target) return session.progressMs
+        if (!session.timerRunning || session.progressAnchorMs == null || _ui.value.proximityAlert != null) {
+            return session.progressMs
+        }
+        val serverNowMs = if (serverClockSynced) serverClockOffsetMs + nowElapsedMs else System.currentTimeMillis()
+        val extraMs = (serverNowMs - session.progressAnchorMs).coerceIn(0L, 12_000L)
+        val capMs = (target - 1000L).coerceAtLeast(session.progressMs)
+        return (session.progressMs + extraMs).coerceAtMost(capMs)
+    }
 
     private var collectJob: Job? = null
     private var uploaderJob: Job? = Job().also { } // placeholder; started below
@@ -516,7 +537,7 @@ class AppModel(private val context: Context, baseUrl: String) {
     private suspend fun uploaderLoop() {
         var validationFailures = 0
         while (true) {
-            delay(2000)
+            delay(if (_ui.value.activeSession != null) 1000L else 2000L)
             val state = _ui.value
             val device = state.deviceId ?: continue
             val rows = runCatching { db.dao().pending(20) }.getOrDefault(emptyList())
@@ -553,6 +574,9 @@ class AppModel(private val context: Context, baseUrl: String) {
                 val pending = db.dao().pendingCount()
                 _ui.update {
                     it.copy(pendingUploads = pending, lastUploadOk = true, lastTick = System.currentTimeMillis())
+                }
+                if (okIds.isNotEmpty() && state.activeSession != null) {
+                    refreshDeviceStateSync()
                 }
             } catch (e: Api.ApiError) {
                 // 422 = the server permanently rejected this batch's content
@@ -591,7 +615,7 @@ class AppModel(private val context: Context, baseUrl: String) {
     /** Periodically: device state -> SESSION_STATE + TIME_ANCHOR to wearable. */
     private suspend fun stateLoop() {
         while (true) {
-            delay(if (_ui.value.activeSession != null) 2000 else 3000)
+            delay(if (_ui.value.activeSession != null) 1500 else 3000)
             refreshDeviceStateSync()
             updateProximityAlert()
         }
@@ -690,16 +714,28 @@ class AppModel(private val context: Context, baseUrl: String) {
         val session = ds.optJSONObject("session")
         val out = ByteArray(17 + 24)
         if (session != null && session.getString("state") == "active") {
+            val view = _ui.value.activeSession
+            val shownProgress = if (view != null && view.state == "active") {
+                displayProgressMs(view)
+            } else {
+                session.optLong("progress_ms")
+            }
+            val runningFlag = view != null &&
+                view.state == "active" &&
+                view.timerRunning &&
+                _ui.value.proximityAlert == null &&
+                view.progressMs < (view.targetMs ?: 0L)
             out[0] = 1
             out[1] = when (session.getString("quest_id")) {
                 "together" -> 1; "explore" -> 2; "quiz" -> 5; else -> 3 // 3 = legacy heart
             }
             out[2] = if (session.optBoolean("demo")) 1 else 0
-            putU32(out, 3, session.optLong("progress_ms"))
+            putU32(out, 3, shownProgress)
             putU32(out, 7, session.optLong("target_ms"))
             out[11] = (ds.optInt("partner_alias", 0)).toByte()
             putU16(out, 12, fnv16(tokenBytes(session.optString("token"))))
             out[14] = 0
+            out[15] = if (runningFlag) 1 else 0
         }
         val completion = ds.optJSONObject("completion")
         if (completion != null) {
@@ -1182,6 +1218,10 @@ class AppModel(private val context: Context, baseUrl: String) {
                 else -> null
             }
         } else null
+        val timerRunning = state == "active" && session.optBoolean("timer_running", false)
+        val progressAnchorMs = session.optString("progress_anchor_at", "")
+            .takeIf { it.isNotBlank() && it != "null" }
+            ?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
         return SessionView(
             sessionId = id,
             questId = questId,
@@ -1197,6 +1237,8 @@ class AppModel(private val context: Context, baseUrl: String) {
             partnerCodeVersion = partnerVer,
             myPinConfirmed = myDone,
             partnerPinConfirmed = partnerDone,
+            timerRunning = timerRunning,
+            progressAnchorMs = progressAnchorMs,
         )
     }
 
@@ -1247,6 +1289,10 @@ class AppModel(private val context: Context, baseUrl: String) {
                 return@runCatching
             }
             val ds = api.deviceState(devId)
+            runCatching { Instant.parse(ds.optString("server_time")).toEpochMilli() }.getOrNull()?.let { srvMs ->
+                serverClockOffsetMs = srvMs - SystemClock.elapsedRealtime()
+                serverClockSynced = true
+            }
             val session = ds.optJSONObject("session")
             val active = session != null && session.optString("state") == "active"
             val token = if (active) session?.optString("token")?.takeIf { it.isNotBlank() } else null

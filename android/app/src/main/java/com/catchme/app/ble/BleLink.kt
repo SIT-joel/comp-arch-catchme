@@ -514,7 +514,7 @@ class BleLink(private val context: Context) {
 
         /** Radio-silent period after a board-initiated disconnect: covers each
          * board's off-link PREADV + SCAN window so phone reconnects land inside ADV. */
-        private const val RECONNECT_DELAY_D1_MS = 2300L
-        private const val RECONNECT_DELAY_D2_MS = 3300L
+        private const val RECONNECT_DELAY_D1_MS = 3300L
+        private const val RECONNECT_DELAY_D2_MS = 4000L
     }
 }
