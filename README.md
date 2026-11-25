@@ -42,6 +42,12 @@ Wearable A (TinyScreen+, ID=1) <--- direct BLE peer ads (0xC5 / 0xC6) ---> Weara
 
 ---
 
+## Web Portal — Badge Shop Purchasing
+
+![Catch Me Web Portal — Badge Shop Purchasing](assets/web-portal-purchasing.png)
+
+---
+
 ## Repository Layout
 
 - `android/` — Android Studio / Gradle Kotlin Compose project (`com.catchme.app`)
